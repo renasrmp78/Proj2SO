@@ -4,6 +4,8 @@
 #include <stddef.h>
 
 #include "constants.h"
+#include "client_str.h"
+
 
 /// Initializes the KVS state.
 /// @return 0 if the KVS state was initialized successfully, 1 otherwise.

@@ -4,7 +4,7 @@
 
 #include <pthread.h>
 #include <stddef.h>
-#include <link_lst.h>
+#include "link_lst.h"
 
 typedef struct KeyNode {
   char *key;

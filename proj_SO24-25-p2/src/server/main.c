@@ -267,7 +267,7 @@ int serve_client(char *buffer){
   Client client;
 
   if (buffer[0] != '1'){
-    fpritnf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);
+    fprintf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);
     return 1;
   }
 
@@ -276,7 +276,7 @@ int serve_client(char *buffer){
   subbuffer[40] = '\0';
   req_fd = open(subbuffer, O_RDONLY);
   if (req_fd == -1) {
-    fprintf("Failed to open fifo <%s> for writing\n", subbuffer);
+    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
     return 1;
   }
   
@@ -285,7 +285,7 @@ int serve_client(char *buffer){
   subbuffer[40] = '\0';
   resp_fd = open(subbuffer, O_WRONLY);
   if (resp_fd == -1) {
-    fprintf("Failed to open fifo <%s> for writing\n", subbuffer);
+    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
     close(req_fd);
     return 1;
   }
@@ -295,7 +295,7 @@ int serve_client(char *buffer){
   subbuffer[40] = '\0';
   notif_fd = open(subbuffer, O_WRONLY);
   if (notif_fd == -1) {
-    fprintf("Failed to open fifo <%s> for writing\n", subbuffer);
+    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
     close(req_fd);
     close(resp_fd);
     return 1;
@@ -352,7 +352,7 @@ int serve_client(char *buffer){
  * This function handles the connecting requests,
  * and then handles the client(its requests and answers)
  */
-void get_requests(char *regist_pipe_path){
+int get_requests(char *regist_pipe_path){ //estava void
   //m create and open requests
   int error = 0;
 
@@ -366,7 +366,7 @@ void get_requests(char *regist_pipe_path){
   // Abrir o FIFO de registo para ler as conexões dos clientes
   int regist_fd = open(regist_pipe_path, O_RDONLY);
   if (regist_fd == -1) {
-    fpritnf(stderr,"Failed to open fifo <%s> for reading\n", regist_pipe_path);
+    fprintf(stderr,"Failed to open fifo <%s> for reading\n", regist_pipe_path);
     unlink(regist_pipe_path);
     return 1;
   }
@@ -382,7 +382,7 @@ void get_requests(char *regist_pipe_path){
       break;
     }
     else if (value == -1){
-      fpritnf(stderr, "There was an error while reading from regist pipe\n");
+      fprintf(stderr, "There was an error while reading from regist pipe\n");
       error = 1;
       break;
     }
@@ -404,7 +404,7 @@ void get_requests(char *regist_pipe_path){
   close(regist_fd);
 
   if(unlink(regist_pipe_path) != 0){
-    fprintf("Failed to destroy fifo <%s>\n", regist_pipe_path);
+    fprintf(stderr, "Failed to destroy fifo <%s>\n", regist_pipe_path);
     return 1;
   }
   

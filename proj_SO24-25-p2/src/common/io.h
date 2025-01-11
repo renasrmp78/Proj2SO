@@ -3,6 +3,11 @@
 
 #include <stddef.h>
 
+/// Writes a string to the given file descriptor.
+/// @param fd The file descriptor to write to.
+/// @param str The string to write.
+void write_str(int fd, const char *str);
+
 /// Reads a given number of bytes from a file descriptor. Will block until all
 /// bytes are read, or fail if not all bytes could be read.
 /// @param fd File descriptor to read from.

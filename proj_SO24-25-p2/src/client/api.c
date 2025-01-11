@@ -53,15 +53,15 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   // create pipes and connect
   //m now create them
   if(mkfifo(req_pipe_path, 0666) != 0){
-    fprintf("Failed to create fifo <%s>\n", req_pipe_path);
+    fprintf(stderr, "Failed to create fifo <%s>\n", req_pipe_path);
     return 1;
   }
   if(mkfifo(resp_pipe_path, 0666) != 0){
-    fprintf("Failed to create fifo <%s>\n", resp_pipe_path);
+    fprintf(stderr, "Failed to create fifo <%s>\n", resp_pipe_path);
     return 1;
   }
   if(mkfifo(notif_pipe_path, 0666) != 0){
-    fprintf("Failed to create fifo <%s>\n", notif_pipe_path);
+    fprintf(stderr,"Failed to create fifo <%s>\n", notif_pipe_path);
     return 1;
   }
 
@@ -69,7 +69,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   //m connect to server
   server_fd = open(server_pipe_path, O_WRONLY);
   if (server_fd == -1) {
-    fprintf("Failed to open fifo <%s> for writing\n", server_pipe_path);
+    fprintf(stderr,"Failed to open fifo <%s> for writing\n", server_pipe_path);
     return 1;
   }
   //m We now probably need to send to the server the name of the fifos we just created             !!!
@@ -77,7 +77,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   
   strncpy(buffer, "1", 1);
 
-  char path[40] = '\0';
+  char path[40] = {'\0'};
   strncpy(path, req_pipe_path, strlen(req_pipe_path));
   strncpy(buffer + 1, path, 40);
 
@@ -96,21 +96,21 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   //m connect to requests pipe
   req_fd = open(req_pipe_path, O_WRONLY);
   if (req_fd == -1) {
-    fprintf("Failed to open fifo <%s> for writing\n", req_pipe_path);
+    fprintf(stderr, "Failed to open fifo <%s> for writing\n", req_pipe_path);
     return 1;
   }
   
   //m connect to answers pipe
   resp_fd = open(resp_pipe_path, O_RDONLY);
   if (resp_fd == -1) {
-    fprintf("Failed to open fifo <%s> for reading\n", resp_pipe_path);
+    fprintf(stderr, "Failed to open fifo <%s> for reading\n", resp_pipe_path);
     return 1;
   }
   
   //m connect to notifications pipe
   notif_fd = open(notif_pipe_path, O_RDONLY);
   if (notif_fd == -1) {
-    fprintf("Failed to open fifo <%s> for reading\n", notif_pipe_path);
+    fprintf(stderr, "Failed to open fifo <%s> for reading\n", notif_pipe_path);
     return 1;
   }
   *notif_pipe = notif_fd; //m secalhar vai ser necessario
@@ -159,17 +159,17 @@ int kvs_disconnect(void) {
   close(notif_fd);
 
   if(unlink(req_pipe_path_c) != 0){
-    fprintf("Failed to destroy fifo <%s>\n", req_pipe_path_c);
+    fprintf(stderr,"Failed to destroy fifo <%s>\n", req_pipe_path_c);
     return 1;
   }
 
   if(unlink(resp_pipe_path_c) != 0){
-    fprintf("Failed to destroy fifo <%s>\n", resp_pipe_path_c);
+    fprintf(stderr,"Failed to destroy fifo <%s>\n", resp_pipe_path_c);
     return 1;
   }
 
   if(unlink(notif_pipe_path_c) != 0){
-    fprintf("Failed to destroy fifo <%s>\n", notif_pipe_path_c);
+    fprintf(stderr,"Failed to destroy fifo <%s>\n", notif_pipe_path_c);
     return 1;
   }
 
