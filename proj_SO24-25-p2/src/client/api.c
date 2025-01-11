@@ -117,12 +117,12 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   
   char buff[2];
   read_all(resp_fd, buff, 2, NULL);
-  if (buff[0] != '1' || buff[1] != 0){
+  if (buff[0] != '1'){
     fprintf(stderr, "Problem with server feedback about connecting\n");
     return 1;
   }
 
-  print_answer(buff[1], (int)buff[0]);
+  print_answer(buff[1], buff[0]);
 
   return 0;
 }
@@ -146,11 +146,12 @@ int kvs_disconnect(void) {
   char buff[2];
   read_all(resp_fd, buff, 2, NULL);
 
-  if (buff[0] != '2' || buff[1] != 0){
+  if (buff[0] != '2'){
     fprintf(stderr, "Problem with server feedback about desconnecting\n");
     return 1;
   }
 
+  print_answer(buff[1], buff[0]);
 
   close(server_fd);
   close(req_fd);
@@ -187,19 +188,14 @@ int kvs_subscribe(const char *key) {
   char buff[2];
   read_all(resp_fd, buff, 2, NULL);
 
-  
-
   if (buff[0] != '3'){
     fprintf(stderr, "Problem with server feedback about subscribing key\n");
     return 1;
   }
-  // buf[1] = 0 se chave não existia na hash, 1 se existia
-  if (buff[1] == '0'){
-    fprintf(stderr,"key didn't exist in server hash\n");
-  }
-  else if(buff[1] == '1'){ return 0;}
+
+  print_answer(buff[1], buff[0]);
   
-  return 1;
+  return 0;
 }
 
 /**
@@ -208,5 +204,19 @@ int kvs_subscribe(const char *key) {
 int kvs_unsubscribe(const char *key) {
   // send unsubscribe message to request pipe and wait for response in response
   // pipe
+
+  //m lets try
+  write_str(req_fd, "4");
+  write_all(req_fd ,key, 41);
+  char buff[2];
+  read_all(resp_fd, buff, 2, NULL);
+
+  if (buff[0] != '4'){
+    fprintf(stderr, "Problem with server feedback about subscribing key\n");
+    return 1;
+  }
+
+  print_answer(buff[1], buff[0]);
+
   return 0;
 }

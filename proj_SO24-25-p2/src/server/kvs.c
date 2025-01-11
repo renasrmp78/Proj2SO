@@ -98,6 +98,7 @@ int delete_pair(HashTable *ht, const char *key) {
       // Free the memory allocated for the key and value
       free(keyNode->key);
       free(keyNode->value);
+      free_list(keyNode->notif_fd);
       free(keyNode); // Free the key node itself
       return 0;      // Exit the function
     }
@@ -108,6 +109,45 @@ int delete_pair(HashTable *ht, const char *key) {
   return 1;
 }
 
+int subscribe_pair(HashTable *ht, const char *key, int notif_fd){
+  int index = hash(key);
+  
+  KeyNode *keyNode = ht->table[index];
+
+  while(keyNode != NULL){
+    if(strcmp(keyNode->key, key) == 0){
+      append_node(&(keyNode->notif_fd), notif_fd); //m not sure
+      return 1;
+    }
+    keyNode = keyNode->next;
+  }
+
+  return 0;
+}
+
+int unsubscribe_pair(HashTable *ht, const char *key, int notif_fd){
+  int index = hash(key);
+  
+  KeyNode *keyNode = ht->table[index];
+
+  while(keyNode != NULL){
+    if(strcmp(keyNode->key, key) == 0){
+      remove_node(&(keyNode->notif_fd), notif_fd); //m not sure
+      return 0;
+    }
+    keyNode = keyNode->next;
+  }
+
+  return 1;
+}
+
+void clients(HashTable *ht, char *key, Node **lk_lst){
+  int index = hash(key);
+  *lk_lst = (((ht->table)[index])->notif_fd);  
+}
+
+
+
 void free_table(HashTable *ht) {
   for (int i = 0; i < TABLE_SIZE; i++) {
     KeyNode *keyNode = ht->table[i];
@@ -116,6 +156,7 @@ void free_table(HashTable *ht) {
       keyNode = keyNode->next;
       free(temp->key);
       free(temp->value);
+      free_list(temp->notif_fd);
       free(temp);
     }
   }

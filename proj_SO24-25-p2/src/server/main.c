@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include "constants.h"
 #include "io.h"
@@ -19,6 +20,14 @@ struct SharedData {
   char *dir_name;
   pthread_mutex_t directory_mutex;
 };
+
+// Estrutura para armazenar os descritores de arquivos do cliente
+typedef struct {
+  int req_fd;     // Descritor de arquivo para o FIFO de requisições
+  int resp_fd;    // Descritor de arquivo para o FIFO de respostas
+  int notif_fd;   // Descritor de arquivo para o FIFO de notificações
+} client_data_t;
+
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -237,7 +246,7 @@ static void *get_file(void *arguments) {
   pthread_exit(NULL);
 }
 
-static void dispatch_threads(DIR *dir) {
+static void dispatch_threads(DIR *dir, int regist_fd) {
   pthread_t *threads = malloc(max_threads * sizeof(pthread_t));
 
   if (threads == NULL) {
@@ -245,36 +254,66 @@ static void dispatch_threads(DIR *dir) {
     return;
   }
 
-  struct SharedData thread_data = {dir, jobs_directory,
-                                   PTHREAD_MUTEX_INITIALIZER};
+  struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
 
   for (size_t i = 0; i < max_threads; i++) {
-    if (pthread_create(&threads[i], NULL, get_file, (void *)&thread_data) !=
-        0) {
+    char buffer[1 + 40 + 40 + 40] = {0}; // Buffer para armazenar os caminhos dos FIFOs
+    ssize_t bytes_read = read(regist_fd, buffer, sizeof(buffer));
+
+    if (bytes_read <= 0) {
+      fprintf(stderr, "Failed to read from FIFO\n");
+      continue; // No cliente conectado no momento, continuamos para a próxima thread
+    }
+
+    // Extrair os caminhos dos FIFOs
+    char req_fifo[40], resp_fifo[40], notif_fifo[40];
+    strncpy(req_fifo, buffer + 1, 40);
+    strncpy(resp_fifo, buffer + 41, 40);
+    strncpy(notif_fifo, buffer + 81, 40);
+
+    // Criar e inicializar a estrutura client_data_t
+    client_data_t *client_data = malloc(sizeof(client_data_t));
+    if (!client_data) {
+      perror("Failed to allocate memory for client_data");
+      continue;
+    }
+    
+    client_data->req_fd = open(req_fifo, O_RDONLY);
+    client_data->resp_fd = open(resp_fifo, O_WRONLY);
+    client_data->notif_fd = open(notif_fifo, O_WRONLY);
+
+    if (client_data->req_fd == -1 || client_data->resp_fd == -1 || client_data->notif_fd == -1) {
+      perror("Failed to open client FIFOs");
+      free(client_data);
+      continue; // Se não conseguimos abrir os FIFOs, pulamos para o próximo cliente
+    }
+
+    // Passar a estrutura client_data para a thread diretamente
+    if (pthread_create(&threads[i], NULL, get_file, (void *)client_data) != 0) {
       fprintf(stderr, "Failed to create thread %zu\n", i);
-      pthread_mutex_destroy(&thread_data.directory_mutex);
-      free(threads);
-      return;
+      free(client_data);
+      continue; // Se a thread não for criada, pulamos para o próximo cliente
     }
   }
 
-  // ler do FIFO de registo
-
+  // Aguardar as threads terminarem
   for (unsigned int i = 0; i < max_threads; i++) {
     if (pthread_join(threads[i], NULL) != 0) {
       fprintf(stderr, "Failed to join thread %u\n", i);
-      pthread_mutex_destroy(&thread_data.directory_mutex);
       free(threads);
       return;
     }
   }
 
+
+  // Limpeza
   if (pthread_mutex_destroy(&thread_data.directory_mutex) != 0) {
     fprintf(stderr, "Failed to destroy directory_mutex\n");
   }
 
   free(threads);
 }
+
 
 int main(int argc, char **argv) {
   if (argc < 4) {
@@ -287,19 +326,44 @@ int main(int argc, char **argv) {
   }
 
   jobs_directory = argv[1];
+  fifo_regist_name = argv[4]; // Caminho do FIFO de registo
 
-  fifo_regist_name = argv[4];//M pathname of the regist fifo
+  if (mkfifo(fifo_regist_name, 0666) == -1) {
+    if (errno != EEXIST) {
+      perror("mkfifo");
+      return 1;
+    }
+  }
+
+  // Abrir o FIFO de registo para ler as conexões dos clientes
+  int regist_fd = open(fifo_regist_name, O_RDONLY | O_NONBLOCK);
+  if (regist_fd == -1) {
+    perror("open fifo_regist_name");
+    return 1;
+  }
+
+  // Criar a estrutura para passar os dados de clientes
+  DIR *dir = opendir(argv[1]);
+  if (dir == NULL) {
+    fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
+    return 0;
+  }
+
+  // Passar regist_fd e dir para a função de despachar threads
+  dispatch_threads(dir, regist_fd);
+
+  // Fechar e remover o FIFO de registo
+  close(regist_fd);
+  unlink(fifo_regist_name);
 
   char *endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
-
   if (*endptr != '\0') {
     fprintf(stderr, "Invalid max_proc value\n");
     return 1;
   }
 
   max_threads = strtoul(argv[2], &endptr, 10);
-
   if (*endptr != '\0') {
     fprintf(stderr, "Invalid max_threads value\n");
     return 1;
@@ -320,13 +384,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  DIR *dir = opendir(argv[1]);
-  if (dir == NULL) {
-    fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
-    return 0;
-  }
-
-  dispatch_threads(dir);
+  dispatch_threads(dir, regist_fd);
 
   if (closedir(dir) == -1) {
     fprintf(stderr, "Failed to close directory\n");

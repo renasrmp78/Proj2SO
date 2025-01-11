@@ -4,10 +4,12 @@
 
 #include <pthread.h>
 #include <stddef.h>
+#include <link_lst.h>
 
 typedef struct KeyNode {
   char *key;
   char *value;
+  Node *notif_fd;
   struct KeyNode *next;
 } KeyNode;
 
@@ -40,6 +42,19 @@ char *read_pair(HashTable *ht, const char *key);
 /// @param key Key of the pair to be deleted.
 /// @return 0 if the node was deleted successfully, 1 otherwise.
 int delete_pair(HashTable *ht, const char *key);
+
+// Acossiates the file descriptor given to a key in the hash table
+// @return 1 if successfull
+// @return 0 if key didn't exist
+int subscribe_pair(HashTable *ht, const char *key, int notif_fd);
+
+// Acossiates the file descriptor given to a key in the hash table
+// @return 0 if successfull
+// @return 1 if key didn't exist
+int unsubscribe_pair(HashTable *ht, const char *key, int notif_fd);
+
+//gets clients that subscribe given key
+void clients(HashTable *ht, char *key, Node **lk_lst);
 
 /// Frees the hashtable.
 /// @param ht Hash table to be deleted.

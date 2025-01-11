@@ -8,6 +8,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "src/common/io.h"
+
 #include "constants.h"
 #include "io.h"
 #include "kvs.h"
@@ -55,6 +57,18 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
     if (write_pair(kvs_table, keys[i], values[i]) != 0) {
       fprintf(stderr, "Failed to write key pair (%s,%s)\n", keys[i], values[i]);
     }
+
+    //m notify client
+    Node *notif_fds = NULL;
+    clients(kvs_table, keys[i], &notif_fds);
+    while(notif_fds != NULL){
+      char buffer[41 + 41] = {'\0'};
+      strncpy(buffer, keys[i], strlen(keys[i]));
+      strncpy(buffer + 41, values[i], strlen(values[i]));
+      write_all(notif_fds->data, buffer,41 + 41);
+      notif_fds = notif_fds->next;
+    }
+
   }
 
   pthread_rwlock_unlock(&kvs_table->tablelock);
@@ -105,6 +119,17 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
       char str[MAX_STRING_SIZE];
       snprintf(str, MAX_STRING_SIZE, "(%s,KVSMISSING)", keys[i]);
       write_str(fd, str);
+    } else{ //m if it was deleted successfully
+      //m notify client
+      Node *notif_fds = NULL;
+      clients(kvs_table, keys[i], &notif_fds);
+      while(notif_fds != NULL){
+        char buffer[41 + 41] = {'\0'};
+        strncpy(buffer, keys[i], strlen(keys[i]));
+        strncpy(buffer + 41, "DELETED", strlen("DELETED"));
+        write_all(notif_fds->data, buffer,41 + 41);
+        notif_fds = notif_fds->next;
+    }
     }
   }
   if (aux) {

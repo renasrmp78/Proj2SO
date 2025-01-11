@@ -9,6 +9,40 @@
 #include "src/client/api.h"
 #include "src/common/constants.h"
 #include "src/common/io.h"
+#include "src/server/io.h"
+
+static void *track_notif(void *arg){
+  int notif_fd = *(int*)arg;
+  char key[41], value[41];
+  int intr;
+
+  while (1){
+    int value = 0;
+    value = read_all(notif_fd, key, 41, &intr);
+    if (value == 0){break;}
+    else if (value == -1){
+      fprintf(stderr, "Error with read all while reading notifications\n");
+    }
+    else if (intr == 1){
+      fprintf(stderr, "Reading in the notification was inturupted\n");
+    }
+
+    value = read_all(notif_fd, value, 41, &intr);
+    if(value == 0 || value == -1){
+      printf("Error while reading from notifications\n");
+    }
+    else if (intr == 1){
+      fprintf(stderr, "Reading in the notification was inturupted\n");
+    }
+
+    write_str(STDOUT_FILENO, "(");
+    write_str(STDOUT_FILENO, key);
+    write_str(STDOUT_FILENO, ",");
+    write_str(STDOUT_FILENO, value);
+    write_str(STDOUT_FILENO, ")\n");
+  }
+
+}
 
 int main(int argc, char *argv[]) {
   if (argc < 3) {
@@ -45,7 +79,12 @@ int main(int argc, char *argv[]) {
   //m still have to create threads to do the operations that
   //m are responsible for receiving the notifications and sending
   //m it to the stdout: I thing notif_pipe is for here
-  //m thread_func 
+  //m thread_func
+  pthread_t notif_thread;
+  if (pthread_create(&notif_thread, NULL, track_notif, (void *)&notif_pipe) !=
+      0) {
+    fprintf(stderr, "Failed to create notifications thread\n");
+  }
 
   //m acho que a tarefa principal deverá ficar a realizar este
   //m while, tmb deve fazer os respetivos pedidos ao server
@@ -59,6 +98,10 @@ int main(int argc, char *argv[]) {
         return 1;
       }
       // TODO: end notifications thread
+      //m lets put the join i think
+      if (pthread_join(notif_thread, NULL) != 0) {
+        fprintf(stderr, "Failed to join notification thread\n", i);
+      }
       printf("Disconnected from server\n");
       return 0;
 
