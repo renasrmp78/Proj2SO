@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
       // TODO: end notifications thread
       //m lets put the join i think
       if (pthread_join(notif_thread, NULL) != 0) {
-        fprintf(stderr, "Failed to join notification thread\n", i);
+        fprintf(stderr, "Failed to join notification thread\n");
       }
       printf("Disconnected from server\n");
       return 0;

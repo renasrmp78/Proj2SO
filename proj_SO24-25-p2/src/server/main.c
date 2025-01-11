@@ -9,8 +9,13 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include "src/common/io.h"
+#include "src/common/constants.h"
+
+#include "client_str.h"
 #include "constants.h"
 #include "io.h"
+#include "link_lst.h"
 #include "operations.h"
 #include "parser.h"
 #include "pthread.h"
@@ -246,7 +251,167 @@ static void *get_file(void *arguments) {
   pthread_exit(NULL);
 }
 
-static void dispatch_threads(DIR *dir, int regist_fd) {
+
+/** m
+ * This function opens the pipes the client created,
+ * and deals with client requests and answers
+ * 
+ * @param  buffer buffer with connect operation
+ * @return 0 if everithing well, and the client disconnected
+ * @return 1 if some problem
+ */
+int serve_client(char *buffer){
+
+  int req_fd, resp_fd, notif_fd;
+  char subbuffer[41];
+  Client client;
+
+  if (buffer[0] != '1'){
+    fpritnf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);
+    return 1;
+  }
+
+  //m connect to requests pipe
+  strncpy(subbuffer, buffer + 1, 40);
+  subbuffer[40] = '\0';
+  req_fd = open(subbuffer, O_RDONLY);
+  if (req_fd == -1) {
+    fprintf("Failed to open fifo <%s> for writing\n", subbuffer);
+    return 1;
+  }
+  
+  //m connect to answers pipe
+  strncpy(subbuffer, buffer + 1 + 40, 40);
+  subbuffer[40] = '\0';
+  resp_fd = open(subbuffer, O_WRONLY);
+  if (resp_fd == -1) {
+    fprintf("Failed to open fifo <%s> for writing\n", subbuffer);
+    close(req_fd);
+    return 1;
+  }
+  
+  //m connect to notifications pipe
+  strncpy(subbuffer, buffer + 1 + 40 + 40, 40);
+  subbuffer[40] = '\0';
+  notif_fd = open(subbuffer, O_WRONLY);
+  if (notif_fd == -1) {
+    fprintf("Failed to open fifo <%s> for writing\n", subbuffer);
+    close(req_fd);
+    close(resp_fd);
+    return 1;
+  }
+
+  client.req_fd = req_fd;
+  client.resp_fd = resp_fd;
+  client.notif_fd = notif_fd;
+
+  int error = 0;
+  while (1){
+    //m get commands
+    char op;
+    read(req_fd, &op, 1);
+    if (op == '2') {
+      if(kvs_disconnect_client(&client) != 0){
+        fprintf(stderr, "Error disconnecting the client from the kvs table\n");
+        error = 1;
+      }
+      break;
+    }
+    else if (op == '3') {
+      if(kvs_subscribe_key(&client) != 0){
+        error = 1;
+        break;
+      }
+    }
+    else if (op == '4') {
+      if(kvs_unsubscribe_key(&client) != 0){
+        error = 1;
+        break;
+      }
+    }
+    else{
+      fprintf(stderr,
+        "Wrong operation number, should've been 1, 2 or 3 but was <%c>\n", op);
+      error = 1;
+      break;
+    }
+  }
+
+  //m destroy list of keys of the client
+  destroy_str_list(client.keys);
+
+  //m not sure, but i think it makes sense to not only clean subscribtions but also close pipes connect..
+  close(req_fd);
+  close(resp_fd);
+  close(notif_fd);
+
+  return error;
+  }
+
+/**
+ * This function handles the connecting requests,
+ * and then handles the client(its requests and answers)
+ */
+void get_requests(char *regist_pipe_path){
+  //m create and open requests
+  int error = 0;
+
+  if (mkfifo(regist_pipe_path, 0666) == -1) {
+    if (errno != EEXIST) {
+      fprintf(stderr, "Failed to create regists thread\n");
+      return 1;
+    }
+  }
+
+  // Abrir o FIFO de registo para ler as conexões dos clientes
+  int regist_fd = open(regist_pipe_path, O_RDONLY);
+  if (regist_fd == -1) {
+    fpritnf(stderr,"Failed to open fifo <%s> for reading\n", regist_pipe_path);
+    unlink(regist_pipe_path);
+    return 1;
+  }
+  while (1){ //right know unless theres an error this while is infinite, it keeps reading connections
+    //m gets a client and connects to the clients pipes
+    char buffer[1 + 40 + 40 + 40];
+    int intr;
+    int value = read_all(regist_fd, buffer, 1 + 40 + 40 + 40, &intr);
+    
+    if (intr == 1){
+      fprintf(stderr, "Reading from regist pipe was interupted\n");
+      error = 1;
+      break;
+    }
+    else if (value == -1){
+      fpritnf(stderr, "There was an error while reading from regist pipe\n");
+      error = 1;
+      break;
+    }
+    else if (value == 0){
+      continue; //wait for the next client connection
+    }
+
+    if (serve_client(buffer) != 0){
+      fprintf(stderr,"There was an error with the client\n");
+      error = 1;
+      break;
+    }
+
+  }
+
+  // Criar a estrutura para passar os dados de clientes
+  // Passar regist_fd e dir para a função de despachar threads
+  // Fechar e remover o FIFO de registo
+  close(regist_fd);
+
+  if(unlink(regist_pipe_path) != 0){
+    fprintf("Failed to destroy fifo <%s>\n", regist_pipe_path);
+    return 1;
+  }
+  
+  return error;
+}
+
+static void dispatch_threads(DIR *dir, char *regist_path) {
   pthread_t *threads = malloc(max_threads * sizeof(pthread_t));
 
   if (threads == NULL) {
@@ -257,56 +422,28 @@ static void dispatch_threads(DIR *dir, int regist_fd) {
   struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
 
   for (size_t i = 0; i < max_threads; i++) {
-    char buffer[1 + 40 + 40 + 40] = {0}; // Buffer para armazenar os caminhos dos FIFOs
-    ssize_t bytes_read = read(regist_fd, buffer, sizeof(buffer));
-
-    if (bytes_read <= 0) {
-      fprintf(stderr, "Failed to read from FIFO\n");
-      continue; // No cliente conectado no momento, continuamos para a próxima thread
-    }
-
-    // Extrair os caminhos dos FIFOs
-    char req_fifo[40], resp_fifo[40], notif_fifo[40];
-    strncpy(req_fifo, buffer + 1, 40);
-    strncpy(resp_fifo, buffer + 41, 40);
-    strncpy(notif_fifo, buffer + 81, 40);
-
-    // Criar e inicializar a estrutura client_data_t
-    client_data_t *client_data = malloc(sizeof(client_data_t));
-    if (!client_data) {
-      perror("Failed to allocate memory for client_data");
-      continue;
-    }
-    
-    client_data->req_fd = open(req_fifo, O_RDONLY);
-    client_data->resp_fd = open(resp_fifo, O_WRONLY);
-    client_data->notif_fd = open(notif_fifo, O_WRONLY);
-
-    if (client_data->req_fd == -1 || client_data->resp_fd == -1 || client_data->notif_fd == -1) {
-      perror("Failed to open client FIFOs");
-      free(client_data);
-      continue; // Se não conseguimos abrir os FIFOs, pulamos para o próximo cliente
-    }
-
-    // Passar a estrutura client_data para a thread diretamente
-    if (pthread_create(&threads[i], NULL, get_file, (void *)client_data) != 0) {
+    if (pthread_create(&threads[i], NULL, get_file, (void *)&thread_data) != 0) {
       fprintf(stderr, "Failed to create thread %zu\n", i);
-      free(client_data);
+      pthread_mutex_destroy(&thread_data.directory_mutex);
+      free(threads);
       continue; // Se a thread não for criada, pulamos para o próximo cliente
     }
   }
 
-  // Aguardar as threads terminarem
+
+  // ler do FIFO de registo
+  get_requests(regist_path);
+
+
   for (unsigned int i = 0; i < max_threads; i++) {
     if (pthread_join(threads[i], NULL) != 0) {
       fprintf(stderr, "Failed to join thread %u\n", i);
+      pthread_mutex_destroy(&thread_data.directory_mutex);
       free(threads);
       return;
     }
   }
 
-
-  // Limpeza
   if (pthread_mutex_destroy(&thread_data.directory_mutex) != 0) {
     fprintf(stderr, "Failed to destroy directory_mutex\n");
   }
@@ -326,44 +463,19 @@ int main(int argc, char **argv) {
   }
 
   jobs_directory = argv[1];
-  fifo_regist_name = argv[4]; // Caminho do FIFO de registo
-
-  if (mkfifo(fifo_regist_name, 0666) == -1) {
-    if (errno != EEXIST) {
-      perror("mkfifo");
-      return 1;
-    }
-  }
-
-  // Abrir o FIFO de registo para ler as conexões dos clientes
-  int regist_fd = open(fifo_regist_name, O_RDONLY | O_NONBLOCK);
-  if (regist_fd == -1) {
-    perror("open fifo_regist_name");
-    return 1;
-  }
-
-  // Criar a estrutura para passar os dados de clientes
-  DIR *dir = opendir(argv[1]);
-  if (dir == NULL) {
-    fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
-    return 0;
-  }
-
-  // Passar regist_fd e dir para a função de despachar threads
-  dispatch_threads(dir, regist_fd);
-
-  // Fechar e remover o FIFO de registo
-  close(regist_fd);
-  unlink(fifo_regist_name);
-
+  /////////////////////////////////////////////////////////////
+  
+  /////////////////////////////////////////////////////////////
   char *endptr;
   max_backups = strtoul(argv[3], &endptr, 10);
+
   if (*endptr != '\0') {
     fprintf(stderr, "Invalid max_proc value\n");
     return 1;
   }
 
   max_threads = strtoul(argv[2], &endptr, 10);
+
   if (*endptr != '\0') {
     fprintf(stderr, "Invalid max_threads value\n");
     return 1;
@@ -384,7 +496,13 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  dispatch_threads(dir, regist_fd);
+  DIR *dir = opendir(argv[1]);
+  if (dir == NULL) {
+    fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
+    return 0;
+  }
+
+  dispatch_threads(dir, argv[4]);
 
   if (closedir(dir) == -1) {
     fprintf(stderr, "Failed to close directory\n");

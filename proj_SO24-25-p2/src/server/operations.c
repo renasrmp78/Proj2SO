@@ -10,6 +10,7 @@
 
 #include "src/common/io.h"
 
+#include "client_str.h"
 #include "constants.h"
 #include "io.h"
 #include "kvs.h"
@@ -205,4 +206,66 @@ int kvs_backup(size_t num_backup, char *job_filename, char *directory) {
 void kvs_wait(unsigned int delay_ms) {
   struct timespec delay = delay_to_timespec(delay_ms);
   nanosleep(&delay, NULL);
+}
+
+int kvs_disconnect_client(Client *client){
+  if(client == NULL){return 1;}
+  
+  Node_str *keys = (client->keys);
+
+  while(keys != NULL){
+    unsubscribe_pair(kvs_table, keys->str, client->notif_fd);
+    keys = keys->next;
+  }
+  //m print success message
+  write(client->resp_fd, "20",2);
+  return 0;
+}
+
+int kvs_subscribe_key(Client *client){
+  if (client == NULL){return 1;}
+  int intr;
+  char key[41] = '\0';
+  int value = read_all(client->req_fd, key, 41, &intr);
+  if(intr == 1){
+    fprintf(stderr,"Reading was interrupted while getting key for subscription\n");
+    return 1;
+  } else if (value == -1 || value == 0){
+    fprintf(stderr,"Error while reading the key for subscription\n");
+    return 1;
+  }
+  append_node_str(&(client->keys), key);
+  
+  int result = subscribe_pair(kvs_table, key, client->notif_fd);
+  
+  //m print message with result
+  write(client->resp_fd, "3",1);
+  char c = (char)result;
+  write(client->resp_fd, &c, 1);
+
+  return 0;
+}
+
+int kvs_unsubscribe_key(Client *client){
+  if (client == NULL){return 1;}
+  int intr;
+  char key[41] = '\0';
+  int value = read_all(client->req_fd, key, 41, &intr);
+  if(intr == 1){
+    fprintf(stderr,"Reading was interrupted while getting key for unsubscription\n");
+    return 1;
+  } else if (value == -1 || value == 0){
+    fprintf(stderr,"Error while reading the key for unsubscription\n");
+    return 1;
+  }
+  remove_node_str(&(client->keys), key);
+
+  int result = unsubscribe_pair(kvs_table, key, client->notif_fd);
+
+  //m print message with result
+  write(client->resp_fd, "4",1);
+  char c = (char)result;
+  write(client->resp_fd, &c, 1);
+
+  return 0;
 }

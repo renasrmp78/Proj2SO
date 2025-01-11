@@ -62,4 +62,15 @@ void set_n_current_backups(int _n_current_backups);
 // @return n_current_backups
 int get_n_current_backups();
 
+/**
+ * This function disconects the client from the hash table
+ */
+int kvs_disconnect_client(Client *client);
+
+/** This function subscribes the client given to the key in requests*/
+int kvs_subscribe_key(Client *client);
+
+/** This function unsubscribs the client to the key in requests */
+int kvs_unsubscribe_key(Client *client);
+
 #endif // KVS_OPERATIONS_H
