@@ -32,8 +32,10 @@ const char* OP_to_string(int op) {
 
 //m “Server returned <response-code> for operation: <connect|disconnect|subscribe|unsubscribe>
 void print_answer(char ans_code, char op){
+  char message[128];
+  snprintf(message, sizeof(message), "Server returned %c for operation: %s\n", ans_code, OP_to_string((int)op));
   write_str(STDOUT_FILENO, "Server returned ");
-  write_str(STDOUT_FILENO, ans_code);
+  write_str(STDOUT_FILENO, message);
   write_str(STDOUT_FILENO, " for operation: ");
   write_str(STDOUT_FILENO, OP_to_string((int)op));
   write_str(STDOUT_FILENO, "\n");
@@ -74,8 +76,8 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   }
   //m We now probably need to send to the server the name of the fifos we just created             !!!
   char buffer[1 + 40 + 40 + 40] = {'\0'};
-  
-  strncpy(buffer, "1", 1);
+  snprintf(buffer, sizeof(buffer), "1");
+
 
   char path[40] = {'\0'};
   strncpy(path, req_pipe_path, strlen(req_pipe_path));
