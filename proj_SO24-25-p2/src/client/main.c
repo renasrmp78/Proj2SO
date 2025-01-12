@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "parser.h"
 #include "src/client/api.h"
@@ -45,6 +46,8 @@ static void *track_notif(void *arg){
 }
 
 int main(int argc, char *argv[]) {
+  signal(SIGTSTP, sigtstp_handler);
+
   if (argc < 3) {
     fprintf(stderr, "Usage: %s <client_unique_id> <register_pipe_path>\n",
             argv[0]);

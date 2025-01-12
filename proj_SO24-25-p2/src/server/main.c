@@ -3,12 +3,14 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
+#include <semaphore.h>
+#include <string.h>
+#include <signal.h>
 
 #include "src/common/io.h"
 #include "src/common/constants.h"
@@ -27,22 +29,27 @@ struct SharedData {
   pthread_mutex_t directory_mutex;
 };
 
-// Estrutura para armazenar os descritores de arquivos do cliente
-typedef struct {
-  int req_fd;     // Descritor de arquivo para o FIFO de requisições
-  int resp_fd;    // Descritor de arquivo para o FIFO de respostas
-  int notif_fd;   // Descritor de arquivo para o FIFO de notificações
-} client_data_t;
 
-
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+//pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t n_current_backups_lock = PTHREAD_MUTEX_INITIALIZER;
+
+pthread_mutex_t sem_lock = PTHREAD_MUTEX_INITIALIZER;
+sem_t sem_prod; //semaforo dos produtors, vai ser inicializado com tamanho maximo
+sem_t sem_consum; //semaforo dos consumidores
+//we put the request in the buffer of productor-consumer
+//char *buffer_p_c[MAX_SESSION_COUNT]; //we will use strdup for the strings, so no problem
+char buffer_p_c[MAX_SESSION_COUNT][1 + 40 + 40 + 40 + 1]; //we will use strdup for the strings, so no problem
+int i_prod = 0;
+int i_consum = 0;
 
 size_t active_backups = 0; // Number of active backups
 size_t max_backups;        // Maximum allowed simultaneous backups
 size_t max_threads;        // Maximum allowed simultaneous threads
 char *jobs_directory = NULL;
 char *fifo_regist_name = NULL;//m
+char *regist_pipe_path_sig = NULL;
+
+
 
 int filter_job_files(const struct dirent *entry) {
   const char *dot = strrchr(entry->d_name, '.');
@@ -276,11 +283,11 @@ static void *get_file(void *arguments) {
  * @return 0 if everithing well, and the client disconnected
  * @return 1 if some problem
  */
-int serve_client(char *buffer){
+
+/*int serve_client_old(char *buffer){
   printf("cc1\n");
   int req_fd, resp_fd, notif_fd;
   char subbuffer[41];
-  Client client;
   client_init(&client);
   printf("cc2\n");
 
@@ -372,16 +379,138 @@ int serve_client(char *buffer){
   close(notif_fd);
 
   return error;
+  }*/
+
+
+/** m
+ * This function opens the pipes the client created,
+ * and deals with client requests and answers
+ * 
+ * @param  buffer buffer with connect operation
+ * @return 0 if everithing well, and the client disconnected
+ * @return 1 if some problem
+ */
+void *serve_client(){
+  int req_fd, resp_fd, notif_fd;
+  char subbuffer[41];
+
+  //wait for space to consum
+  sem_wait(&sem_consum);
+  pthread_mutex_lock(&sem_lock);
+  
+  //get a client info request from the buffer
+  char buffer[1 + 40 + 40 + 40 + 1];
+  printf("iconsum = %d\n", i_consum);
+  memcpy(buffer, buffer_p_c[i_consum], 1 + 40 + 40 + 40 + 1); //cant forget to free at the end
+  i_consum = (i_consum + 1)%MAX_SESSION_COUNT;
+  printf("iconsum = %d\n", i_consum);
+  printf("buffer= <%s>\n", buffer);
+  char path[41];
+  strncpy(path, buffer + 41, 41);
+  printf("buffer= <%s>\n", path);
+  strncpy(path, buffer + 81, 41);
+  printf("buffer= <%s>\n", path);
+  for(int i = 0; i< 121; i++){
+    printf("i: %d <%c>\n", i, buffer[i]);
+  }
+
+  Client *client = create_client(); //this function will create a client and add it to a list of clients online, it returns a pointer to it
+  add_Client(client); //adds client to server list of clients in operations
+  printf("cc1\n");
+  
+  //client_init(&client);
+  printf("cc2\n");
+
+  if (buffer[0] != '1'){
+    fprintf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);
+  }
+  printf("cc3\n");
+
+  //m connect to requests pipe
+  strncpy(subbuffer, buffer + 1, 40);
+  subbuffer[40] = '\0';
+  req_fd = open(subbuffer, O_RDONLY);
+  if (req_fd == -1) {
+    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
+  }
+  printf("cc4\n");
+  
+  //m connect to answers pipe
+  strncpy(subbuffer, buffer + 1 + 40, 40);
+  subbuffer[40] = '\0';
+  resp_fd = open(subbuffer, O_WRONLY);
+  if (resp_fd == -1) {
+    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
+  }
+  printf("cc5\n");
+  
+  //m connect to notifications pipe
+  strncpy(subbuffer, buffer + 1 + 40 + 40, 40);
+  subbuffer[40] = '\0';
+  notif_fd = open(subbuffer, O_WRONLY);
+  if (notif_fd == -1) {
+    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
+  }
+  printf("cc6\n");
+  
+  //free buffer that was created by prod using strdup
+  //free(buffer); 
+
+  //give feedback to client about successful connection to server
+  write(resp_fd, "10", 2);
+
+  client->req_fd = req_fd;
+  client->resp_fd = resp_fd;
+  client->notif_fd = notif_fd;
+  
+  while (1){
+    printf("cc7\n");
+
+    //m get commands
+    char op;
+    read(req_fd, &op, 1);
+    if (op == '2') {
+      if(kvs_disconnect_client(client) != 0){
+        fprintf(stderr, "Error disconnecting the client from the kvs table\n");
+      }
+      break;
+    }
+    else if (op == '3') {
+      if(kvs_subscribe_key(client) != 0){
+        break;
+      }
+    }
+    else if (op == '4') {
+      if(kvs_unsubscribe_key(client) != 0){
+        break;
+      }
+    }
+    else{
+      fprintf(stderr,
+        "Wrong operation number, should've been 1, 2 or 3 but was <%c>\n", op);
+      break;
+    }
+  }
+
+
+  //m not sure, but i think it makes sense to not only clean subscribtions but also close pipes connect..
+  close(req_fd);
+  close(resp_fd);
+  close(notif_fd);
+
+  return NULL;
   }
 
 /**
  * This function handles the connecting requests,
  * and then handles the client(its requests and answers)
  */
-int get_requests(char *regist_pipe_path){ //estava void
+
+/*int get_requests_old(char *regist_pipe_path){ //estava void
   //m create and open requests
   int error = 0;
-
+  //init semaphores
+  //creating regist fifo
   printf("aaa\n");
   printf("aa\n");
   umask(0);
@@ -395,12 +524,7 @@ int get_requests(char *regist_pipe_path){ //estava void
   }
   printf("a\n");
 
-  if (access(regist_pipe_path, F_OK) == -1) {
-    perror("FIFO does not exist");
-    return 1;
-  }
-
-  // Abrir o FIFO de registo para ler as conexões dos clientes
+  // opening regist fifo
   printf("regist path= <%s>\n", regist_pipe_path);
   int regist_fd = open(regist_pipe_path, O_RDONLY);
   printf("ab\n");
@@ -410,12 +534,15 @@ int get_requests(char *regist_pipe_path){ //estava void
     return 1;
   }
   printf("b\n");
-  while (1){ //right know unless theres an error this while is infinite, it keeps reading connections
-    //m gets a client and connects to the clients pipes
-    char buffer[1 + 40 + 40 + 40];
-    int intr;
+
+  //getting requests
+  char buffer[1 + 40 + 40 + 40]; //for clients request info
+  int intr = 0; //not used for now
+  while (1){ 
+    //wait for space to add new request
+    
     //int value = read_all(regist_fd, buffer, 1 + 40 + 40 + 40, &intr);
-    int value = read(regist_fd, buffer, 1 + 40 + 40 + 40 + 40);
+    int value = (int)read(regist_fd, buffer, 1 + 40 + 40 + 40);
     if (intr == 1){
       fprintf(stderr, "Reading from regist pipe was interupted\n");
       error = 1;
@@ -429,13 +556,17 @@ int get_requests(char *regist_pipe_path){ //estava void
     else if (value == 0){
       continue; //wait for the next client connection
     }
+
     printf("c\n");
+    //putting info in the prod-consum buffer
     if (serve_client(buffer) != 0){
       fprintf(stderr,"There was an error with the client\n");
       error = 1;
       break;
     }
     printf("d\n");
+
+    printf("wait for new client request\n");
 
   }
 
@@ -450,7 +581,132 @@ int get_requests(char *regist_pipe_path){ //estava void
   }
   
   return error;
+}*/
+
+
+int get_requests(char *regist_pipe_path){ //estava void
+  //m create and open requests
+  int error = 0;
+  //init semaphores
+  sem_init(&sem_prod, 0, MAX_SESSION_COUNT);
+  sem_init(&sem_consum, 0, 0);
+
+  //creating regist fifo
+  printf("aaa\n");
+  printf("aa\n");
+  umask(0);
+  if (mkfifo(regist_pipe_path, 0666) == -1) {
+    perror("mkfifo failed");
+    if (errno != EEXIST) {
+      fprintf(stderr, "Failed to create regists thread\n");
+      return 1;
+    }
+    printf("ERROR\n");
+  }
+  printf("a\n");
+
+  // opening regist fifo
+  printf("regist path= <%s>\n", regist_pipe_path);
+  int regist_fd = open(regist_pipe_path, O_RDONLY);
+  printf("ab\n");
+  if (regist_fd == -1) {
+    fprintf(stderr,"Failed to open fifo <%s> for reading\n", regist_pipe_path);
+    unlink(regist_pipe_path);
+    return 1;
+  }
+  printf("b\n");
+
+  int thread_id;
+  //sending client handling threads
+  pthread_t threads[MAX_SESSION_COUNT];
+  for (size_t i = 0; i < max_threads; i++) {
+    if (pthread_create(&threads[i], NULL, serve_client, NULL) != 0) {
+      fprintf(stderr, "Failed to create thread %zu\n", i);
+      error = 1;
+      continue;
+    }
+    thread_id = (int)i;
+    printf("Thread [%d] starting\n", thread_id);
+  }
+  
+  //getting requests
+  char buffer[1 + 40 + 40 + 40 + 1]; //for clients request info
+  int intr = 0; //not used for now
+  while (1){ 
+    //wait for space to add new request
+    sem_wait(&sem_prod);
+    pthread_mutex_lock(&sem_lock);
+    
+    //int value = read_all(regist_fd, buffer, 1 + 40 + 40 + 40, &intr);
+    int value = (int)read(regist_fd, buffer, 1 + 40 + 40 + 40);
+    buffer[121] = '\0';
+    printf("[%d]buffer= <%s>\n", thread_id, buffer);
+    char path[41];
+    strncpy(path, buffer + 41, 41);
+    printf("[%d]buffer= <%s>\n", thread_id, path);
+    strncpy(path, buffer + 81, 41);
+    printf("[%d]buffer= <%s>\n", thread_id, path);
+    if (intr == 1){
+      fprintf(stderr, "Reading from regist pipe was interupted\n");
+      error = 1;
+      break;
+    }
+    else if (value == -1){
+      fprintf(stderr, "There was an error while reading from regist pipe\n");
+      error = 1;
+      break;
+    }
+    else if (value == 0){
+      continue; //wait for the next client connection
+    }
+
+    //adding to prod-consum buffer
+    //char *dup = strdup(buffer);
+    
+
+    memcpy(buffer_p_c[i_prod], buffer, 1 + 40 + 40 + 40 + 1);
+
+    printf("[%d]buff_p_c= <%s>\n", thread_id, buffer_p_c[i_prod]);
+    strncpy(path, buffer_p_c[i_prod] + 41, 41);
+    printf("[%d]buff_p_c= <%s>\n", thread_id, path);
+    strncpy(path, buffer_p_c[i_prod] + 81, 41);
+    printf("[%d]buff_p_c= <%s>\n", thread_id, path);
+
+    printf("[%d]iprod = %d\n", thread_id, i_prod);
+    i_prod = (i_prod + 1)%MAX_SESSION_COUNT;
+    printf("[%d]iprod = %d\n", thread_id, i_prod);
+    
+    
+    
+    printf("[%d]c\n", thread_id);
+
+    pthread_mutex_unlock(&sem_lock);
+    sem_post(&sem_consum); //new client to attend
+    
+    printf("[%d]wait for new client request\n", thread_id);
+  }
+  
+  
+
+  // Fechar e remover o FIFO de registo
+  close(regist_fd);
+
+  if(unlink(regist_pipe_path) != 0){
+    fprintf(stderr, "Failed to destroy fifo <%s>\n", regist_pipe_path);
+    return 1;
+  }
+
+  //wait for threads
+  for (unsigned int i = 0; i < max_threads; i++) {
+    if (pthread_join(threads[i], NULL) != 0) {
+      fprintf(stderr, "Failed to join thread %u\n", i);
+      error = 1;
+    }
+  }
+
+  return error;
 }
+
 
 static void dispatch_threads(DIR *dir, char *regist_path) {
   pthread_t *threads = malloc(max_threads * sizeof(pthread_t));
@@ -495,8 +751,15 @@ static void dispatch_threads(DIR *dir, char *regist_path) {
   free(threads);
 }
 
-
+void sigtstp_handler() {
+    printf("\nCaught SIGTSTP (Ctrl+Z). Cleaning up resources...\n");
+    if(unlink(regist_pipe_path_sig) != 0){
+      fprintf(stderr, "Failed to destroy fifo <%s>\n", regist_pipe_path_sig);
+    }
+    exit(0);
+}
 int main(int argc, char **argv) {
+  signal(SIGTSTP, sigtstp_handler);
   if (argc < 4) {
     write_str(STDERR_FILENO, "Usage: ");
     write_str(STDERR_FILENO, argv[0]);
@@ -510,6 +773,7 @@ int main(int argc, char **argv) {
   if(argv[4] == NULL){printf("hell nah\n");}
 
   jobs_directory = argv[1];
+  regist_pipe_path_sig = argv[4];
   /////////////////////////////////////////////////////////////
   
   /////////////////////////////////////////////////////////////

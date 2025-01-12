@@ -9,7 +9,7 @@
 typedef struct KeyNode {
   char *key;
   char *value;
-  Node *notif_fd;
+  Node *ids;
   struct KeyNode *next;
 } KeyNode;
 
@@ -46,15 +46,20 @@ int delete_pair(HashTable *ht, const char *key);
 // Acossiates the file descriptor given to a key in the hash table
 // @return 1 if successfull
 // @return 0 if key didn't exist
-int subscribe_pair(HashTable *ht, const char *key, int notif_fd);
+int subscribe_pair(HashTable *ht, const char *key, int id);
 
 // Acossiates the file descriptor given to a key in the hash table
 // @return 0 if subscribtion existed and was removes
 // @return 1 if subscribtion didn't exist
-int unsubscribe_pair(HashTable *ht, const char *key, int notif_fd);
+int unsubscribe_pair(HashTable *ht, const char *key, int id);
+
+/**
+ * @returns 1 if found, 0 otherwise
+ */
+int find_pair(HashTable *ht, const char *key);
 
 //gets clients that subscribe given key
-void clients(HashTable *ht, char *key, Node **lk_lst);
+void get_clients_ids(HashTable *ht, char *key, Node **lk_lst);
 
 /// Frees the hashtable.
 /// @param ht Hash table to be deleted.

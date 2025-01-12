@@ -15,7 +15,10 @@
 #include "io.h"
 #include "kvs.h"
 
+
 static struct HashTable *kvs_table = NULL;
+
+Client *clients = NULL;
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -60,14 +63,19 @@ int kvs_write(size_t num_pairs, char keys[][MAX_STRING_SIZE],
     }
 
     //m notify client
-    Node *notif_fds = NULL;
-    clients(kvs_table, keys[i], &notif_fds);
-    while(notif_fds != NULL){
-      char buffer[41 + 41] = {'\0'};
-      strncpy(buffer, keys[i], strlen(keys[i]));
-      strncpy(buffer + 41, values[i], strlen(values[i]));
-      write_all(notif_fds->data, buffer,41 + 41);
-      notif_fds = notif_fds->next;
+    Node *ids = NULL;
+    get_clients_ids(kvs_table, keys[i], &ids);
+    while(ids != NULL){
+      Client *client = get_client(clients, ids->data);
+      if(client == NULL){
+        fprintf(stderr, "Error, for some reason the client with the given id doesnt exist\n");
+        return 1;
+      }
+      char buffer[41 + 41];
+      strncpy(buffer, keys[i], 41);
+      strncpy(buffer + 41, values[i], 41);
+      write_all(client->notif_fd, buffer,41 + 41);
+      ids = ids->next;
     }
 
   }
@@ -117,17 +125,30 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     //m notify client
     printf("d3\n");
     //m notify clients that subscrive key, that she was deleted
-    Node *notif_fds = NULL;
-    clients(kvs_table, keys[i], &notif_fds);
+    Node *ids = NULL;
+    get_clients_ids(kvs_table, keys[i], &ids);
     printf("d4\n");
-    while(notif_fds != NULL){
+    while(ids != NULL){
       printf("d5\n");
+      Client *client = get_client(clients, ids->data);
+      if(client == NULL){
+        fprintf(stderr, "Error, for some reason the client with the given id doesnt exist\n");
+        return 1;
+      }
 
-      char buffer[41 + 41] = {'\0'};
-      strncpy(buffer, keys[i], strlen(keys[i]));
-      strcpy(buffer + 41, "DELETED");
-      write_all(notif_fds->data, buffer,41 + 41);
-      notif_fds = notif_fds->next;
+      //notify client
+      char buffer[41 + 41];
+      strncpy(buffer, keys[i], 41);
+      strncpy(buffer + 41, "DELETED", 41);
+      write_all(client->notif_fd, buffer,41 + 41);
+
+      //remove key from client subsscribed keys
+      print_str_list(client->keys);
+      remove_node_str(&(client->keys), keys[i]);
+      print_str_list(client->keys);
+      client->n_keys--;
+
+      ids = ids->next;
       printf("d6\n");
 
     }
@@ -141,6 +162,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
       snprintf(str, MAX_STRING_SIZE, "(%s,KVSMISSING)", keys[i]);
       write_str(fd, str);
     }
+
   }
   if (aux) {
     write_str(fd, "]\n");
@@ -212,10 +234,14 @@ int kvs_backup(size_t num_backup, char *job_filename, char *directory) {
   return 0;
 }
 
+
+
 void kvs_wait(unsigned int delay_ms) {
   struct timespec delay = delay_to_timespec(delay_ms);
   nanosleep(&delay, NULL);
 }
+
+
 
 int kvs_disconnect_client(Client *client){
   if(client == NULL){return 1;}
@@ -223,16 +249,27 @@ int kvs_disconnect_client(Client *client){
   Node_str *keys = (client->keys);
 
   while(keys != NULL){
-    unsubscribe_pair(kvs_table, keys->str, client->notif_fd);
+    unsubscribe_pair(kvs_table, keys->str, client->id);
     keys = keys->next;
   }
+
+  //removes the client from the list fo clients
+  remove_client(&clients, client->id);
+
+  //m destroy the client
+  destroy_client(client);
+
   //m print success message
   write(client->resp_fd, "20",2);
   return 0;
 }
+
+
+
 //still need to do the case if the key is already subscribed
 int kvs_subscribe_key(Client *client){ 
   if (client == NULL){return 1;}
+  
   int intr;
   char key[41] = {'\0'};
   int value = read_all(client->req_fd, key, 40, &intr);
@@ -244,9 +281,31 @@ int kvs_subscribe_key(Client *client){
     fprintf(stderr,"Error while reading the key for subscription\n");
     return 1;
   }
-  append_node_str(&(client->keys), key);
+
   
-  int result = subscribe_pair(kvs_table, key, client->notif_fd);
+  //still has space for subs
+  // not yet subscribed
+  printf("subscribtion for key <%s> \n", key);
+  printf("found key <%s> ? <%d> in client keys:\n",key,find_node_str(client->keys, key));
+  print_str_list(client->keys);
+  printf("n keys before = %d", client->n_keys);
+  
+  //result only depends whether the key exists on not 1 or 0 respectively
+  printf("n keys before = %d", client->n_keys);
+  int result = 0;
+  if (find_pair(kvs_table, key)){
+    result = 1;
+    if (client->n_keys < MAX_NUMBER_SUB && find_node_str(client->keys, key) != 1){ 
+      //things in client
+      print_str_list(client->keys);
+      append_node_str(&(client->keys), key);
+      print_str_list(client->keys);
+      client->n_keys++;
+      //things in kvs table
+      subscribe_pair(kvs_table, key, client->id);
+   }
+  }
+  
   
   //m print message with result
   write(client->resp_fd, "3",1);
@@ -270,14 +329,30 @@ int kvs_unsubscribe_key(Client *client){
     fprintf(stderr,"Error while reading the key for unsubscription\n");
     return 1;
   }
-  remove_node_str(&(client->keys), key);
+  
+  printf("n keys before = %d", client->n_keys);
 
-  int result = unsubscribe_pair(kvs_table, key, client->notif_fd);
-
+  int result = 1; //0 if was subscribed, 1 if wasnt
+  if (find_node_str(client->keys, key) == 1){ //if subscribed
+    result = 0;
+    //remove from client list
+    print_str_list(client->keys);
+    remove_node_str(&(client->keys), key);
+    print_str_list(client->keys);
+    client->n_keys--;
+    //remove from kvs
+    unsubscribe_pair(kvs_table, key, client->id);
+  }
+  printf("n keys after= %d", client->n_keys);
   //m print message with result
   write(client->resp_fd, "4",1);
   char c = (char)(result + 48);//na ASCII '0' = 48
   write(client->resp_fd, &c, 1);
 
   return 0;
+}
+
+
+void add_Client(Client *client){
+  append_client(&clients, client);
 }

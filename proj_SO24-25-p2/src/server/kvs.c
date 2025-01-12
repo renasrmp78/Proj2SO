@@ -98,7 +98,7 @@ int delete_pair(HashTable *ht, const char *key) {
       // Free the memory allocated for the key and value
       free(keyNode->key);
       free(keyNode->value);
-      free_list(keyNode->notif_fd);
+      free_list(keyNode->ids);
       free(keyNode); // Free the key node itself
       return 0;      // Exit the function
     }
@@ -110,16 +110,16 @@ int delete_pair(HashTable *ht, const char *key) {
 }
 
 
-int subscribe_pair(HashTable *ht, const char *key, int notif_fd){
+int subscribe_pair(HashTable *ht, const char *key, int id){
   int index = hash(key);
   
   KeyNode *keyNode = ht->table[index];
 
   while(keyNode != NULL){
     if(strcmp(keyNode->key, key) == 0){
-      print_int_list(keyNode->notif_fd);
-      append_node(&(keyNode->notif_fd), notif_fd); //m not sure
-      print_int_list(keyNode->notif_fd);
+      print_int_list(keyNode->ids);
+      append_node(&(keyNode->ids), id); //m not sure
+      print_int_list(keyNode->ids);
       return 1;
     }
     keyNode = keyNode->next;
@@ -128,7 +128,7 @@ int subscribe_pair(HashTable *ht, const char *key, int notif_fd){
   return 0;
 }
 
-int unsubscribe_pair(HashTable *ht, const char *key, int notif_fd){
+int unsubscribe_pair(HashTable *ht, const char *key, int id){
   int index = hash(key);
   
   KeyNode *keyNode = ht->table[index];
@@ -136,14 +136,14 @@ int unsubscribe_pair(HashTable *ht, const char *key, int notif_fd){
   while(keyNode != NULL){ //percorre ate encontrar a key certa
     if(strcmp(keyNode->key, key) == 0){
       printf("in right key\n");
-      print_int_list(keyNode->notif_fd);
-      if(remove_node(&(keyNode->notif_fd), notif_fd) == 1){ //m if existed
+      print_int_list(keyNode->ids);
+      if(remove_node(&(keyNode->ids), id) == 1){ //m if existed
         printf("here1\n");
-        print_int_list(keyNode->notif_fd);
+        print_int_list(keyNode->ids);
         return 0;
       } else{
         printf("here2\n");
-        print_int_list(keyNode->notif_fd);
+        print_int_list(keyNode->ids);
       }
       printf("really ?? breaking\n");
       break; //every key are unique
@@ -154,7 +154,20 @@ int unsubscribe_pair(HashTable *ht, const char *key, int notif_fd){
   return 1;
 }
 
-void clients(HashTable *ht, char *key, Node **lk_lst){
+int find_pair(HashTable *ht, const char *key){
+  int index = hash(key);
+
+  KeyNode *head = ht->table[index];
+  while (head != NULL){
+    if (strcmp(head->key, key) == 0){ //found
+      return 1;
+    }
+    head = head->next;
+  }
+  return 0; //not found
+}
+
+void get_clients_ids(HashTable *ht, char *key, Node **lk_lst){
   
   printf("key = <%s>", key);
   printf("c1\n");
@@ -163,7 +176,7 @@ void clients(HashTable *ht, char *key, Node **lk_lst){
   printf("c2\n");
   if(ht == NULL){printf("hell nah\n");}
   if((ht->table)[index] == NULL){printf("hell nah2\n");}
-  *lk_lst = (((ht->table)[index])->notif_fd);
+  *lk_lst = (((ht->table)[index])->ids);
   printf("c3\n");
 }
 
@@ -177,7 +190,7 @@ void free_table(HashTable *ht) {
       keyNode = keyNode->next;
       free(temp->key);
       free(temp->value);
-      free_list(temp->notif_fd);
+      free_list(temp->ids);
       free(temp);
     }
   }

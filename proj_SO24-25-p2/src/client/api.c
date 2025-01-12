@@ -2,6 +2,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
+#include <stdlib.h>
 
 #include "api.h"
 
@@ -23,6 +25,23 @@ int req_fd;
 int resp_fd;
 int notif_fd;
 int server_fd;
+
+void sigtstp_handler() {
+    printf("\nCaught SIGTSTP (Ctrl+Z). Cleaning up resources...\n");
+    // Clean up resources here
+    if(unlink(req_pipe_path_c) != 0){
+      fprintf(stderr,"Failed to destroy fifo <%s>\n", req_pipe_path_c);
+    }
+
+    if(unlink(resp_pipe_path_c) != 0){
+      fprintf(stderr,"Failed to destroy fifo <%s>\n", resp_pipe_path_c);
+    }
+
+    if(unlink(notif_pipe_path_c) != 0){
+      fprintf(stderr,"Failed to destroy fifo <%s>\n", notif_pipe_path_c);
+    }
+    exit(0);  // Terminate program after cleanup
+}
 
 const char* OP_to_string(int op) {
     switch (op) {
@@ -109,6 +128,12 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   strncpy(path, notif_pipe_path, 41);
   strncpy(buffer + 1 + 40 + 40, path, 41);
 
+  printf("buffer= <%s>\n", buffer);
+  strncpy(path, buffer + 41, 41);
+  printf("buffer= <%s>\n", path);
+  strncpy(path, buffer + 81, 41);
+  printf("buffer= <%s>\n", path);
+  
   write_all(server_fd, buffer, 1 + 40 + 40 + 40);
   //m Until the server connects to the respective fifos we will send, our program will
   //m bbe blocked in these next opens

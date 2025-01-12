@@ -41,7 +41,7 @@ void free_list(Node *head) {
 int remove_node(Node **head, int value) {
     if (*head == NULL) {  // Lista vazia
         fprintf(stderr,"A lista está vazia. Nada para remover.\n");
-        return;
+        return 0;
     }
 
     Node *current = *head;

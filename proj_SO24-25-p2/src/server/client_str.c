@@ -1,13 +1,8 @@
 #include "client_str.h"
 
-
-void client_init(Client *client){
-    client->n_keys = 0;
-    client->req_fd = 0;
-    client->resp_fd = 0;
-    client->notif_fd = 0;
-    client->keys = NULL;
-}
+#include <pthread.h>
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+int client_id = 0; //a clint id the server nominates to the client
 
 // Function to create a new node
 Node_str *create_node_str(const char *string) {
@@ -67,6 +62,16 @@ int remove_node_str(Node_str **head, const char *string) {
     return 0; // Element not found
 }
 
+int find_node_str(Node_str *head, const char *value){
+    while (head != NULL){
+        if (strcmp(head->str, value) == 0){//found
+            return 1;
+        }
+        head = head->next;
+    }
+    return 0;
+}
+
 // Function to free the memory of all nodes in the list
 void destroy_str_list(Node_str *head) {
     Node_str *current = head;
@@ -85,4 +90,76 @@ void print_str_list(Node_str *head){
         head = head->next;
     }
     printf("]\n");
+}
+
+Client *create_client(){
+    Client *client = (Client *)malloc(sizeof(Client));
+    pthread_mutex_lock(&lock);
+    client->id = client_id;
+    client_id++;
+    pthread_mutex_unlock(&lock);
+    client->n_keys = 0;
+    client->req_fd = -1;
+    client->resp_fd = -1;
+    client->notif_fd = -1;
+    client->keys = NULL;
+    client->next = NULL;
+    return client;
+}
+
+
+
+void append_client(Client **head, Client *client){
+    if(*head == NULL){
+        *head = client;
+    }
+    Client *current = *head;
+    while(current->next != NULL){
+        current = current->next;
+    }
+    current->next = client;
+}
+
+Client *get_client(Client *head, int id){
+    while(head != NULL){
+        if(head->id == id){
+            return head;
+        }
+        head = head->next;
+    }
+    return NULL;
+}
+
+int remove_client(Client **head, int id){
+    if (*head == NULL) {
+        return 0; // List is empty, nothing to remove
+    }
+
+    Client *current = *head;
+    Client *previous = NULL;
+
+    // Traverse the list to find the matching node
+    while (current != NULL) {
+        if (current->id == id) {
+            // Match found
+            if (previous == NULL) {
+                // Removing the head node
+                *head = current->next;
+            } else {
+                // Removing a node in the middle or end
+                previous->next = current->next;
+            }
+            destroy_client(current);
+            return 1; // Element successfully removed
+        }
+        previous = current;
+        current = current->next;
+    }
+
+    return 0; // Element not found
+}
+void destroy_client(Client *client){
+    if (client == NULL){return;}
+    destroy_str_list(client->keys);
+    free(client);
 }

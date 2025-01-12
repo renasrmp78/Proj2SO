@@ -5,5 +5,7 @@ SHOW
 BACKUP
 DELETE [c]
 READ [c]
-WAIT 1000
+WRITE [(a,annalideo)]
+WRITE [(b,bernadete)]
+DELETE [a]
 SHOW

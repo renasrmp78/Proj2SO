@@ -5,6 +5,8 @@
 
 #include "constants.h"
 #include "client_str.h"
+#include "src/common/constants.h"
+
 
 
 /// Initializes the KVS state.
@@ -74,5 +76,16 @@ int kvs_subscribe_key(Client *client);
 
 /** This function unsubscribs the client to the key in requests */
 int kvs_unsubscribe_key(Client *client);
+
+/**
+ * @returns 1 if found key in hash table, 0 otherwise
+ */
+int kvs_find(const char *key);
+
+/** 
+ * This fucntin adds the client to the list of
+ * clients in the server
+ */
+void add_Client(Client *client);
 
 #endif // KVS_OPERATIONS_H
