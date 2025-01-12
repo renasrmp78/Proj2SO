@@ -36,5 +36,6 @@ int remove_node_str(Node_str **head, const char *string);
 // Function to free the memory of all nodes in the list
 void destroy_str_list(Node_str *head);
 
+void print_str_list(Node_str *head);
 
 #endif

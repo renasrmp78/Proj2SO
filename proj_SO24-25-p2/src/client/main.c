@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
             argv[0]);
     return 1;
   }
-  char *server_pipe_path = argv[1];
+  char *server_pipe_path = argv[2];
 
   char req_pipe_path[256] = "/tmp/req";
   char resp_pipe_path[256] = "/tmp/resp";
@@ -74,7 +74,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to connect to server\n");
     return 1;
   }
-
+  printf("cl a\n");
+  fflush(stdout);
   //m still have to create threads to do the operations that
   //m are responsible for receiving the notifications and sending
   //m it to the stdout: I thing notif_pipe is for here
@@ -84,14 +85,17 @@ int main(int argc, char *argv[]) {
       0) {
     fprintf(stderr, "Failed to create notifications thread\n");
   }
+  printf("cl b\n");
 
   //m acho que a tarefa principal deverá ficar a realizar este
   //m while, tmb deve fazer os respetivos pedidos ao server
   //m e receber as respetivas respostas
   while (1) {
+    printf("cl c\n");
 
     switch (get_next(STDIN_FILENO)) {
     case CMD_DISCONNECT:
+      printf("cl d\n");
       if (kvs_disconnect() != 0) {
         fprintf(stderr, "Failed to disconnect to the server\n");
         return 1;
@@ -105,12 +109,16 @@ int main(int argc, char *argv[]) {
       return 0;
 
     case CMD_SUBSCRIBE:
+      printf("cmd_subs\n");
+
       num = parse_list(STDIN_FILENO, keys, 1, MAX_STRING_SIZE);
       if (num == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");
         continue;
       }
 
+      printf("key to subscribe: <%s>\n", keys[0]);
+      printf("size of key[0]: <%ld>\n", sizeof(keys[0]));
       if (kvs_subscribe(keys[0])) {
         fprintf(stderr, "Command subscribe failed\n");
       }
@@ -118,6 +126,8 @@ int main(int argc, char *argv[]) {
       break;
 
     case CMD_UNSUBSCRIBE:
+      printf("cmd_unsubs\n");
+
       num = parse_list(STDIN_FILENO, keys, 1, MAX_STRING_SIZE);
       if (num == 0) {
         fprintf(stderr, "Invalid command. See HELP for usage\n");

@@ -10,6 +10,7 @@
 #include "src/common/io.h"
 #include "src/server/io.h"
 
+#include <errno.h>
 #include <sys/stat.h>
 
 
@@ -25,7 +26,7 @@ int server_fd;
 
 const char* OP_to_string(int op) {
     switch (op) {
-        case OP_CODE_CONNECT: return "connect";
+        case 1: return "connect";
         case OP_CODE_DISCONNECT: return "disconnect";
         case OP_CODE_SUBSCRIBE: return "subscribe";
         case OP_COPE_UNSUBSCRIBE: return "unsubscribe";
@@ -38,9 +39,12 @@ void print_answer(char ans_code, char op){
   //char message[128];
   //snprintf(message, sizeof(message), "Server returned %c for operation: %s\n", ans_code, OP_to_string((int)op));
   write_str(STDOUT_FILENO, "Server returned ");
-  write_str(STDOUT_FILENO, &ans_code);
+  char str[2];
+  str[0] = ans_code;
+  str[1] = '\0';
+  write_str(STDOUT_FILENO, str);
   write_str(STDOUT_FILENO, " for operation: ");
-  write_str(STDOUT_FILENO, OP_to_string((int)op));
+  write_str(STDOUT_FILENO, OP_to_string((int)op - 48)); // 48 is 0 in the ASCCI
   write_str(STDOUT_FILENO, "\n");
 }
 
@@ -57,37 +61,50 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   
   // create pipes and connect
   //m now create them
-  if(mkfifo(req_pipe_path, 0666) != 0){
-    fprintf(stderr, "Failed to create fifo <%s>\n", req_pipe_path);
-    return 1;
+  if(mkfifo(req_pipe_path, 0666)){
+    if (errno != EEXIST) {
+      fprintf(stderr, "Failed to create fifo <%s>\n", req_pipe_path);
+      return 1;
+    }
   }
   if(mkfifo(resp_pipe_path, 0666) != 0){
-    fprintf(stderr, "Failed to create fifo <%s>\n", resp_pipe_path);
-    return 1;
+    if (errno != EEXIST) {
+      fprintf(stderr, "Failed to create fifo <%s>\n", resp_pipe_path);
+      return 1;
+    }
   }
   if(mkfifo(notif_pipe_path, 0666) != 0){
-    fprintf(stderr,"Failed to create fifo <%s>\n", notif_pipe_path);
-    return 1;
+    if (errno != EEXIST) {
+      fprintf(stderr,"Failed to create fifo <%s>\n", notif_pipe_path);
+      return 1;
+    }
   }
 
   //m open connections
   //m connect to server
+  printf("path server <%s>\n", server_pipe_path);
+  printf("za\n");
   server_fd = open(server_pipe_path, O_WRONLY);
   if (server_fd == -1) {
+    perror("nao sei");
     fprintf(stderr,"Failed to open fifo <%s> for writing\n", server_pipe_path);
     return 1;
   }
+  printf("zb\n");
   //m We now probably need to send to the server the name of the fifos we just created             !!!
   char buffer[1 + 40 + 40 + 40 + 1];
   snprintf(buffer, 2, "1"); //he needs the secont char for this.
+  printf("zc\n");
 
   //each time the '\0' char will be overwriten by the next path
   char path[41];
   strncpy(path, req_pipe_path, 41);
   strncpy(buffer + 1, path, 41);
+  printf("zd\n");
 
   strncpy(path, resp_pipe_path, 41);
   strncpy(buffer + 1 + 40, path, 41);
+  printf("ze\n");
 
   strncpy(path, notif_pipe_path, 41);
   strncpy(buffer + 1 + 40 + 40, path, 41);
@@ -95,6 +112,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   write_all(server_fd, buffer, 1 + 40 + 40 + 40);
   //m Until the server connects to the respective fifos we will send, our program will
   //m bbe blocked in these next opens
+  printf("zf\n");
 
   //m connect to requests pipe
   req_fd = open(req_pipe_path, O_WRONLY);
@@ -102,6 +120,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
     fprintf(stderr, "Failed to open fifo <%s> for writing\n", req_pipe_path);
     return 1;
   }
+  printf("zg\n");
   
   //m connect to answers pipe
   resp_fd = open(resp_pipe_path, O_RDONLY);
@@ -109,7 +128,7 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
     fprintf(stderr, "Failed to open fifo <%s> for reading\n", resp_pipe_path);
     return 1;
   }
-  
+  printf("zh\n");
   //m connect to notifications pipe
   notif_fd = open(notif_pipe_path, O_RDONLY);
   if (notif_fd == -1) {
@@ -117,14 +136,20 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
     return 1;
   }
   *notif_pipe = notif_fd; //m secalhar vai ser necessario
+  printf("zi\n");
   
-  char buff[2];
+  char buff[3];
   read_all(resp_fd, buff, 2, NULL);
+
+  buff[2] = '\0';
+
+  printf("buff<%s>\n", buff);
+  printf("zii\n");
   if (buff[0] != '1'){
     fprintf(stderr, "Problem with server feedback about connecting\n");
     return 1;
   }
-
+  printf("zj\n");
   print_answer(buff[1], buff[0]);
 
   return 0;
@@ -186,11 +211,13 @@ int kvs_disconnect(void) {
 int kvs_subscribe(const char *key) {
   // send subscribe message to request pipe and wait for response in response
   //m lets try
-  write_str(req_fd, "3");
-  write_all(req_fd ,key, 41);
-  char buff[2];
+  if (write_all(req_fd, "3", 1) == -1 || write_all(req_fd ,key, 40) == -1){
+    fprintf(stderr, "Error writing subscribtion request to server\n");
+  }
+  char buff[3];
   read_all(resp_fd, buff, 2, NULL);
-
+  buff[2] = '\0';
+  printf("buff = <%s>\n", buff);
   if (buff[0] != '3'){
     fprintf(stderr, "Problem with server feedback about subscribing key\n");
     return 1;
@@ -209,8 +236,10 @@ int kvs_unsubscribe(const char *key) {
   // pipe
 
   //m lets try
-  write_str(req_fd, "4");
-  write_all(req_fd ,key, 41);
+  if (write_all(req_fd, "4", 1) == -1 || write_all(req_fd ,key, 40) == -1){
+    fprintf(stderr, "Error writing unsubscribtion request to server\n");
+  }
+
   char buff[2];
   read_all(resp_fd, buff, 2, NULL);
 

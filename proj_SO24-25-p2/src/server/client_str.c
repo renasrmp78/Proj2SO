@@ -76,3 +76,13 @@ void destroy_str_list(Node_str *head) {
         current = next;
     }
 }
+
+void print_str_list(Node_str *head){
+    printf("Elements = [");
+    while (head != NULL) {
+
+        printf("%s,",head->str);
+        head = head->next;
+    }
+    printf("]\n");
+}

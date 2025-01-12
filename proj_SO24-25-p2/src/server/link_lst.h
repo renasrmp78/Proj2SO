@@ -23,6 +23,9 @@ void append_node(Node **head, int data);
 void free_list(Node *head);
 
 // Função para remover um nó com um valor específico
-void remove_node(Node **head, int value);
+// returns 1 if the value existex, else 0
+int remove_node(Node **head, int value);
+
+void print_int_list(Node *head);
 
 #endif

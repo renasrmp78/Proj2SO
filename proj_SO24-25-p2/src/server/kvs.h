@@ -49,8 +49,8 @@ int delete_pair(HashTable *ht, const char *key);
 int subscribe_pair(HashTable *ht, const char *key, int notif_fd);
 
 // Acossiates the file descriptor given to a key in the hash table
-// @return 0 if successfull
-// @return 1 if key didn't exist
+// @return 0 if subscribtion existed and was removes
+// @return 1 if subscribtion didn't exist
 int unsubscribe_pair(HashTable *ht, const char *key, int notif_fd);
 
 //gets clients that subscribe given key

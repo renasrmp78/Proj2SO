@@ -107,11 +107,31 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
     fprintf(stderr, "KVS state must be initialized\n");
     return 1;
   }
-
+  printf("d1\n");
   pthread_rwlock_wrlock(&kvs_table->tablelock);
 
   int aux = 0;
   for (size_t i = 0; i < num_pairs; i++) {
+    printf("d2\n");
+    //m if it was deleted successfully
+    //m notify client
+    printf("d3\n");
+    //m notify clients that subscrive key, that she was deleted
+    Node *notif_fds = NULL;
+    clients(kvs_table, keys[i], &notif_fds);
+    printf("d4\n");
+    while(notif_fds != NULL){
+      printf("d5\n");
+
+      char buffer[41 + 41] = {'\0'};
+      strncpy(buffer, keys[i], strlen(keys[i]));
+      strcpy(buffer + 41, "DELETED");
+      write_all(notif_fds->data, buffer,41 + 41);
+      notif_fds = notif_fds->next;
+      printf("d6\n");
+
+    }
+    
     if (delete_pair(kvs_table, keys[i]) != 0) {
       if (!aux) {
         write_str(fd, "[");
@@ -120,17 +140,6 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
       char str[MAX_STRING_SIZE];
       snprintf(str, MAX_STRING_SIZE, "(%s,KVSMISSING)", keys[i]);
       write_str(fd, str);
-    } else{ //m if it was deleted successfully
-      //m notify client
-      Node *notif_fds = NULL;
-      clients(kvs_table, keys[i], &notif_fds);
-      while(notif_fds != NULL){
-        char buffer[41 + 41] = {'\0'};
-        strncpy(buffer, keys[i], strlen(keys[i]));
-        strcpy(buffer + 41, "DELETED");
-        write_all(notif_fds->data, buffer,41 + 41);
-        notif_fds = notif_fds->next;
-    }
     }
   }
   if (aux) {
@@ -221,12 +230,13 @@ int kvs_disconnect_client(Client *client){
   write(client->resp_fd, "20",2);
   return 0;
 }
-
-int kvs_subscribe_key(Client *client){
+//still need to do the case if the key is already subscribed
+int kvs_subscribe_key(Client *client){ 
   if (client == NULL){return 1;}
   int intr;
-  char key[41] = { '\0' };
-  int value = read_all(client->req_fd, key, 41, &intr);
+  char key[41] = {'\0'};
+  int value = read_all(client->req_fd, key, 40, &intr);
+  printf("Server read the key <%s>\n", key);
   if(intr == 1){
     fprintf(stderr,"Reading was interrupted while getting key for subscription\n");
     return 1;
@@ -240,7 +250,9 @@ int kvs_subscribe_key(Client *client){
   
   //m print message with result
   write(client->resp_fd, "3",1);
-  char c = (char)result;
+  char c = (char)(result+ 48); //na ASCII '0' = 48
+  printf("result was <%d>\n", result);
+  printf("char from result is = <%c>\n", c);
   write(client->resp_fd, &c, 1);
 
   return 0;
@@ -249,8 +261,8 @@ int kvs_subscribe_key(Client *client){
 int kvs_unsubscribe_key(Client *client){
   if (client == NULL){return 1;}
   int intr;
-  char key[41] = { '\0' };
-  int value = read_all(client->req_fd, key, 41, &intr);
+  char key[41] = {'\0'};
+  int value = read_all(client->req_fd, key, 40, &intr);
   if(intr == 1){
     fprintf(stderr,"Reading was interrupted while getting key for unsubscription\n");
     return 1;
@@ -264,7 +276,7 @@ int kvs_unsubscribe_key(Client *client){
 
   //m print message with result
   write(client->resp_fd, "4",1);
-  char c = (char)result;
+  char c = (char)(result + 48);//na ASCII '0' = 48
   write(client->resp_fd, &c, 1);
 
   return 0;

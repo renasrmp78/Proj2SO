@@ -78,6 +78,7 @@ static int entry_files(const char *dir, struct dirent *entry, char *in_path,
 static int run_job(int in_fd, int out_fd, char *filename) {
   size_t file_backups = 0;
   while (1) {
+    printf("e1\n");
     char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     char values[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
     unsigned int delay;
@@ -85,6 +86,8 @@ static int run_job(int in_fd, int out_fd, char *filename) {
 
     switch (get_next(in_fd)) {
     case CMD_WRITE:
+      printf("e2\n");
+
       num_pairs =
           parse_write(in_fd, keys, values, MAX_WRITE_SIZE, MAX_STRING_SIZE);
       if (num_pairs == 0) {
@@ -98,6 +101,7 @@ static int run_job(int in_fd, int out_fd, char *filename) {
       break;
 
     case CMD_READ:
+      printf("e3\n");
       num_pairs =
           parse_read_delete(in_fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
@@ -111,25 +115,32 @@ static int run_job(int in_fd, int out_fd, char *filename) {
       }
       break;
 
+      
     case CMD_DELETE:
+      printf("e4\n");
       num_pairs =
           parse_read_delete(in_fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
+      printf("e41\n");
 
       if (num_pairs == 0) {
         write_str(STDERR_FILENO, "Invalid command. See HELP for usage\n");
         continue;
       }
-
+      printf("e422\n");
       if (kvs_delete(num_pairs, keys, out_fd)) {
         write_str(STDERR_FILENO, "Failed to delete pair\n");
       }
+      printf("e42\n");
+
       break;
 
     case CMD_SHOW:
+      printf("e5\n");
       kvs_show(out_fd);
       break;
 
     case CMD_WAIT:
+      printf("e6\n");
       if (parse_wait(in_fd, &delay, NULL) == -1) {
         write_str(STDERR_FILENO, "Invalid command. See HELP for usage\n");
         continue;
@@ -142,6 +153,7 @@ static int run_job(int in_fd, int out_fd, char *filename) {
       break;
 
     case CMD_BACKUP:
+      printf("e7\n");
       pthread_mutex_lock(&n_current_backups_lock);
       if (active_backups >= max_backups) {
         wait(NULL);
@@ -190,24 +202,24 @@ static void *get_file(void *arguments) {
   struct SharedData *thread_data = (struct SharedData *)arguments;
   DIR *dir = thread_data->dir;
   char *dir_name = thread_data->dir_name;
-
+  printf("dir_name= %s\n", dir_name);
   if (pthread_mutex_lock(&thread_data->directory_mutex) != 0) {
     fprintf(stderr, "Thread failed to lock directory_mutex\n");
     return NULL;
   }
-
+  printf("a\n");
   struct dirent *entry;
   char in_path[MAX_JOB_FILE_NAME_SIZE], out_path[MAX_JOB_FILE_NAME_SIZE];
   while ((entry = readdir(dir)) != NULL) {
     if (entry_files(dir_name, entry, in_path, out_path)) {
       continue;
     }
-
+    printf("b\n");
     if (pthread_mutex_unlock(&thread_data->directory_mutex) != 0) {
       fprintf(stderr, "Thread failed to unlock directory_mutex\n");
       return NULL;
     }
-
+    printf("c\n");
     int in_fd = open(in_path, O_RDONLY);
     if (in_fd == -1) {
       write_str(STDERR_FILENO, "Failed to open input file: ");
@@ -215,19 +227,20 @@ static void *get_file(void *arguments) {
       write_str(STDERR_FILENO, "\n");
       pthread_exit(NULL);
     }
-
-    int out_fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    printf("d\n");
+    int out_fd = open(out_path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
     if (out_fd == -1) {
       write_str(STDERR_FILENO, "Failed to open output file: ");
       write_str(STDERR_FILENO, out_path);
       write_str(STDERR_FILENO, "\n");
       pthread_exit(NULL);
     }
-
+    printf("e\n");
     int out = run_job(in_fd, out_fd, entry->d_name);
 
     close(in_fd);
     close(out_fd);
+    printf("f\n");
 
     if (out) {
       if (closedir(dir) == -1) {
@@ -237,12 +250,14 @@ static void *get_file(void *arguments) {
 
       exit(0);
     }
+    printf("g\n");
 
     if (pthread_mutex_lock(&thread_data->directory_mutex) != 0) {
       fprintf(stderr, "Thread failed to lock directory_mutex\n");
       return NULL;
     }
   }
+  printf("e\n");
 
   if (pthread_mutex_unlock(&thread_data->directory_mutex) != 0) {
     fprintf(stderr, "Thread failed to unlock directory_mutex\n");
@@ -262,16 +277,18 @@ static void *get_file(void *arguments) {
  * @return 1 if some problem
  */
 int serve_client(char *buffer){
-
+  printf("cc1\n");
   int req_fd, resp_fd, notif_fd;
   char subbuffer[41];
   Client client;
   client_init(&client);
+  printf("cc2\n");
 
   if (buffer[0] != '1'){
     fprintf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);
     return 1;
   }
+  printf("cc3\n");
 
   //m connect to requests pipe
   strncpy(subbuffer, buffer + 1, 40);
@@ -281,6 +298,7 @@ int serve_client(char *buffer){
     fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
     return 1;
   }
+  printf("cc4\n");
   
   //m connect to answers pipe
   strncpy(subbuffer, buffer + 1 + 40, 40);
@@ -291,6 +309,7 @@ int serve_client(char *buffer){
     close(req_fd);
     return 1;
   }
+  printf("cc5\n");
   
   //m connect to notifications pipe
   strncpy(subbuffer, buffer + 1 + 40 + 40, 40);
@@ -302,6 +321,9 @@ int serve_client(char *buffer){
     close(resp_fd);
     return 1;
   }
+  printf("cc6\n");
+
+  write(resp_fd, "10", 2);
 
   client.req_fd = req_fd;
   client.resp_fd = resp_fd;
@@ -309,6 +331,8 @@ int serve_client(char *buffer){
 
   int error = 0;
   while (1){
+    printf("cc7\n");
+
     //m get commands
     char op;
     read(req_fd, &op, 1);
@@ -358,26 +382,40 @@ int get_requests(char *regist_pipe_path){ //estava void
   //m create and open requests
   int error = 0;
 
+  printf("aaa\n");
+  printf("aa\n");
+  umask(0);
   if (mkfifo(regist_pipe_path, 0666) == -1) {
+    perror("mkfifo failed");
     if (errno != EEXIST) {
       fprintf(stderr, "Failed to create regists thread\n");
       return 1;
     }
+    printf("ERROR\n");
+  }
+  printf("a\n");
+
+  if (access(regist_pipe_path, F_OK) == -1) {
+    perror("FIFO does not exist");
+    return 1;
   }
 
   // Abrir o FIFO de registo para ler as conexões dos clientes
+  printf("regist path= <%s>\n", regist_pipe_path);
   int regist_fd = open(regist_pipe_path, O_RDONLY);
+  printf("ab\n");
   if (regist_fd == -1) {
     fprintf(stderr,"Failed to open fifo <%s> for reading\n", regist_pipe_path);
     unlink(regist_pipe_path);
     return 1;
   }
+  printf("b\n");
   while (1){ //right know unless theres an error this while is infinite, it keeps reading connections
     //m gets a client and connects to the clients pipes
     char buffer[1 + 40 + 40 + 40];
     int intr;
-    int value = read_all(regist_fd, buffer, 1 + 40 + 40 + 40, &intr);
-    
+    //int value = read_all(regist_fd, buffer, 1 + 40 + 40 + 40, &intr);
+    int value = read(regist_fd, buffer, 1 + 40 + 40 + 40 + 40);
     if (intr == 1){
       fprintf(stderr, "Reading from regist pipe was interupted\n");
       error = 1;
@@ -391,12 +429,13 @@ int get_requests(char *regist_pipe_path){ //estava void
     else if (value == 0){
       continue; //wait for the next client connection
     }
-
+    printf("c\n");
     if (serve_client(buffer) != 0){
       fprintf(stderr,"There was an error with the client\n");
       error = 1;
       break;
     }
+    printf("d\n");
 
   }
 
@@ -423,6 +462,8 @@ static void dispatch_threads(DIR *dir, char *regist_path) {
 
   struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
 
+  
+
   for (size_t i = 0; i < max_threads; i++) {
     if (pthread_create(&threads[i], NULL, get_file, (void *)&thread_data) != 0) {
       fprintf(stderr, "Failed to create thread %zu\n", i);
@@ -432,9 +473,10 @@ static void dispatch_threads(DIR *dir, char *regist_path) {
     }
   }
 
-
+  printf("created\n");
   // ler do FIFO de registo
   get_requests(regist_path);
+  printf("after\n");
 
 
   for (unsigned int i = 0; i < max_threads; i++) {
@@ -449,7 +491,7 @@ static void dispatch_threads(DIR *dir, char *regist_path) {
   if (pthread_mutex_destroy(&thread_data.directory_mutex) != 0) {
     fprintf(stderr, "Failed to destroy directory_mutex\n");
   }
-
+  
   free(threads);
 }
 
@@ -463,6 +505,9 @@ int main(int argc, char **argv) {
     write_str(STDERR_FILENO, " <max_backups> \n");
     return 1;
   }
+
+  printf("argv[4] = <%s>\n", argv[4]);
+  if(argv[4] == NULL){printf("hell nah\n");}
 
   jobs_directory = argv[1];
   /////////////////////////////////////////////////////////////
@@ -503,6 +548,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Failed to open directory: %s\n", argv[1]);
     return 0;
   }
+
 
   dispatch_threads(dir, argv[4]);
 

@@ -38,7 +38,7 @@ void free_list(Node *head) {
 }
 
 // Função para remover um nó com um valor específico
-void remove_node(Node **head, int value) {
+int remove_node(Node **head, int value) {
     if (*head == NULL) {  // Lista vazia
         fprintf(stderr,"A lista está vazia. Nada para remover.\n");
         return;
@@ -51,21 +51,36 @@ void remove_node(Node **head, int value) {
     if (current->data == value) {
         *head = current->next;  // Mover o ponteiro head para o próximo nó
         free(current);          // Liberar o nó antigo
-        return;
+        return 1;
     }
 
     // Percorrer a lista para encontrar o nó a ser removido
-    while (current != NULL && current->data != value) {
+    while (current != NULL) {
+        printf("current data = %d\n", current->data);
+        printf("value= %d\n", value);
+        if (current->data == value){
+            break;
+        }
         prev = current;          // Guardar o nó atual como o anterior
         current = current->next; // Avançar para o próximo nó
     }
-
+    printf("really??333\n");
     if (current == NULL) {  // Valor não encontrado
-        printf("Valor %d não encontrado na lista.\n", value);
-        return;
+        return 0;
     }
 
     // Remover o nó encontrado
+    printf("really222??\n");
     prev->next = current->next;  // Fazer o nó anterior apontar para o próximo do nó atual
     free(current);               // Liberar o nó atual
+    return 1;
+}
+
+void print_int_list(Node *head){
+    printf("Elements = [");
+    while (head != NULL) {
+        printf("%d,",head->data);
+        head = head->next;
+    }
+    printf("]\n");
 }
