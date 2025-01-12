@@ -1,6 +1,6 @@
 #ifndef CLIENT_STR_H
 #define CLIENT_STR_H
-
+#include "client_str.h"
 #include "constants.h"
 
 #include <ctype.h>
@@ -22,8 +22,7 @@ typedef struct Client{
 
 } Client;
 
-#include "client_str.h"
-
+void client_init(Client *client);
 
 // Function to create a new node
 Node_str *create_node_str(const char *string);

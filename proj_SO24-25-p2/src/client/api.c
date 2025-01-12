@@ -10,6 +10,9 @@
 #include "src/common/io.h"
 #include "src/server/io.h"
 
+#include <sys/stat.h>
+
+
 char const *req_pipe_path_c;
 char const *resp_pipe_path_c;
 char const *server_pipe_path_c;
@@ -32,10 +35,10 @@ const char* OP_to_string(int op) {
 
 //m “Server returned <response-code> for operation: <connect|disconnect|subscribe|unsubscribe>
 void print_answer(char ans_code, char op){
-  char message[128];
-  snprintf(message, sizeof(message), "Server returned %c for operation: %s\n", ans_code, OP_to_string((int)op));
+  //char message[128];
+  //snprintf(message, sizeof(message), "Server returned %c for operation: %s\n", ans_code, OP_to_string((int)op));
   write_str(STDOUT_FILENO, "Server returned ");
-  write_str(STDOUT_FILENO, message);
+  write_str(STDOUT_FILENO, &ans_code);
   write_str(STDOUT_FILENO, " for operation: ");
   write_str(STDOUT_FILENO, OP_to_string((int)op));
   write_str(STDOUT_FILENO, "\n");
@@ -75,21 +78,19 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
     return 1;
   }
   //m We now probably need to send to the server the name of the fifos we just created             !!!
-  char buffer[1 + 40 + 40 + 40] = {'\0'};
-  snprintf(buffer, sizeof(buffer), "1");
+  char buffer[1 + 40 + 40 + 40 + 1];
+  snprintf(buffer, 2, "1"); //he needs the secont char for this.
 
+  //each time the '\0' char will be overwriten by the next path
+  char path[41];
+  strncpy(path, req_pipe_path, 41);
+  strncpy(buffer + 1, path, 41);
 
-  char path[40] = {'\0'};
-  strncpy(path, req_pipe_path, strlen(req_pipe_path));
-  strncpy(buffer + 1, path, 40);
+  strncpy(path, resp_pipe_path, 41);
+  strncpy(buffer + 1 + 40, path, 41);
 
-  memset(path, '\0', 40);
-  strncpy(path, resp_pipe_path, strlen(resp_pipe_path));
-  strncpy(buffer + 1 + 40, path, 40);
-
-  memset(path, '\0', 40);
-  strncpy(path, notif_pipe_path, strlen(notif_pipe_path));
-  strncpy(buffer + 1 + 40 + 40, path, 40);
+  strncpy(path, notif_pipe_path, 41);
+  strncpy(buffer + 1 + 40 + 40, path, 41);
 
   write_all(server_fd, buffer, 1 + 40 + 40 + 40);
   //m Until the server connects to the respective fifos we will send, our program will

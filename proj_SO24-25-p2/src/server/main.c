@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -265,6 +266,7 @@ int serve_client(char *buffer){
   int req_fd, resp_fd, notif_fd;
   char subbuffer[41];
   Client client;
+  client_init(&client);
 
   if (buffer[0] != '1'){
     fprintf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);

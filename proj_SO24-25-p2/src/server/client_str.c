@@ -1,6 +1,14 @@
 #include "client_str.h"
 
 
+void client_init(Client *client){
+    client->n_keys = 0;
+    client->req_fd = 0;
+    client->resp_fd = 0;
+    client->notif_fd = 0;
+    client->keys = NULL;
+}
+
 // Function to create a new node
 Node_str *create_node_str(const char *string) {
     Node_str *new_node = (Node_str *)malloc(sizeof(Node_str));
