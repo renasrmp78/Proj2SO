@@ -127,7 +127,7 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int fd) {
       while(notif_fds != NULL){
         char buffer[41 + 41] = {'\0'};
         strncpy(buffer, keys[i], strlen(keys[i]));
-        strncpy(buffer + 41, "DELETED", strlen("DELETED"));
+        strcpy(buffer + 41, "DELETED");
         write_all(notif_fds->data, buffer,41 + 41);
         notif_fds = notif_fds->next;
     }
@@ -225,7 +225,7 @@ int kvs_disconnect_client(Client *client){
 int kvs_subscribe_key(Client *client){
   if (client == NULL){return 1;}
   int intr;
-  char key[41] = '\0';
+  char key[41] = { '\0' };
   int value = read_all(client->req_fd, key, 41, &intr);
   if(intr == 1){
     fprintf(stderr,"Reading was interrupted while getting key for subscription\n");
@@ -249,7 +249,7 @@ int kvs_subscribe_key(Client *client){
 int kvs_unsubscribe_key(Client *client){
   if (client == NULL){return 1;}
   int intr;
-  char key[41] = '\0';
+  char key[41] = { '\0' };
   int value = read_all(client->req_fd, key, 41, &intr);
   if(intr == 1){
     fprintf(stderr,"Reading was interrupted while getting key for unsubscription\n");

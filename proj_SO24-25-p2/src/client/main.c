@@ -17,18 +17,18 @@ static void *track_notif(void *arg){
   int intr;
 
   while (1){
-    int value = 0;
-    value = read_all(notif_fd, key, 41, &intr);
-    if (value == 0){break;}
-    else if (value == -1){
+    int result = 0;
+    result = read_all(notif_fd, key, 41, &intr);
+    if (result == 0){break;}
+    else if (result == -1){
       fprintf(stderr, "Error with read all while reading notifications\n");
     }
     else if (intr == 1){
       fprintf(stderr, "Reading in the notification was inturupted\n");
     }
 
-    value = read_all(notif_fd, value, 41, &intr);
-    if(value == 0 || value == -1){
+    result = read_all(notif_fd, value, 41, &intr);
+    if(result == 0 || result == -1){
       printf("Error while reading from notifications\n");
     }
     else if (intr == 1){
@@ -41,7 +41,7 @@ static void *track_notif(void *arg){
     write_str(STDOUT_FILENO, value);
     write_str(STDOUT_FILENO, ")\n");
   }
-
+  return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
   char req_pipe_path[256] = "/tmp/req";
   char resp_pipe_path[256] = "/tmp/resp";
   char notif_pipe_path[256] = "/tmp/notif";
-  int req_fd = 0, resp_fd = 0, notif_fd = 0;
+  int req_fd = 0, resp_fd = 0, notif_fd = 0; //não estão a ser usados pq?
 
   char keys[MAX_NUMBER_SUB][MAX_STRING_SIZE] = {0};
   unsigned int delay_ms;

@@ -13,12 +13,12 @@
 
 typedef struct Node_str{
     char str[MAX_STRING_SIZE + 1];
-    Node_str *next;
-}Node_str;
+    struct Node_str *next;
+} Node_str;
 
 typedef struct Client{
-    int req_fd, resp_fd, notif_fd, n_keys = 0;
-    Node_str *keys = NULL;
+    int req_fd, resp_fd, notif_fd, n_keys; //= 0
+    Node_str *keys; //=NULL
 
 } Client;
 

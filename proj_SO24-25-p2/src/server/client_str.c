@@ -16,7 +16,7 @@ Node_str *create_node_str(const char *string) {
 
 // Function to append a node to the end of the list
 void append_node_str(Node_str **head, const char *string) {
-    Node_str *new_node = create_node(string);
+    Node_str *new_node = create_node_str(string);
 
     if (*head == NULL) {
         *head = new_node;
