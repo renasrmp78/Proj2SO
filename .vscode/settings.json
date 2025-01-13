@@ -3,6 +3,13 @@
         "operations.h": "c",
         "constants.h": "c",
         "types.h": "c",
-        "string.h": "c"
+        "string.h": "c",
+        "ratio": "c",
+        "system_error": "c",
+        "array": "c",
+        "functional": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c"
     }
 }

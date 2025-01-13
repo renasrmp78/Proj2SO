@@ -27,6 +27,43 @@ static struct timespec delay_to_timespec(unsigned int delay_ms) {
   return (struct timespec){delay_ms / 1000, (delay_ms % 1000) * 1000000};
 }
 
+void sigusr1_handler(){
+  remove_all_clients();
+}
+
+void kvs_remove_client(int id){
+  remove_client(&clients, id);
+}
+
+
+void remove_all_clients(){
+  printf("[RemoveAllClients] Entered remove_all_clients\n");
+  Client *head = clients;
+  clients = NULL;
+
+  while(head != NULL){
+    printf("[RemoveAllClients] Cleaning client[%d] from server\n", head->id);
+    printf("[RemoveAllClients] Closing client[%d] fd's\n", head->id);
+    close(head->req_fd);
+    close(head->resp_fd);
+    close(head->notif_fd);
+    printf("[RemoveAllClients] Client[%d] fd's closed\n", head->id);
+
+    printf("[RemoveAllClients] Removing client[%d] from its keys\n", head->id);
+    Node_str *ks = head->keys;
+    while(ks != NULL){
+      unsubscribe_pair(kvs_table, ks->str, head->id);
+      ks = ks->next;
+    }
+    printf("[RemoveAllClients] Hash table is cleared of client[%d]\n",head->id);
+    printf("[RemoveAllClients] Destroying client[%d] \n", head->id);
+    destroy_client(head);
+    printf("[RemoveAllClients] Client destroyed \n");
+    head = head->next;
+  }
+  printf("[RemoveAllClients] Remove all clients\n");
+}
+
 int kvs_init() {
   if (kvs_table != NULL) {
     fprintf(stderr, "KVS state has already been initialized\n");
@@ -280,16 +317,22 @@ int kvs_subscribe_key(Client *client){
   int intr;
   char key[41] = {'\0'};
   int value = read_all(client->req_fd, key, 40, &intr);
-  printf("Server read the key <%s>\n", key);
-  if(intr == 1){
+  if (errno == EBADF){return 2;}
+  
+  if (errno == EBADF){
+    return 2; //get a new client
+  }
+  else if(intr == 1){
     fprintf(stderr,"Reading was interrupted while getting key for subscription\n");
     return 1;
-  } else if (value == -1 || value == 0){
+  } else if (value == -1){
     fprintf(stderr,"Error while reading the key for subscription\n");
     return 1;
+  } else if(value == 0){
+    return 2;// get a new client
   }
 
-  
+  printf("Server read the key <%s>\n", key);
   //still has space for subs
   // not yet subscribed
   printf("subscribtion for key <%s> \n", key);
@@ -316,10 +359,13 @@ int kvs_subscribe_key(Client *client){
   
   //m print message with result
   write(client->resp_fd, "3",1);
+  if (errno == EBADF){return 2;}
+
   char c = (char)(result+ 48); //na ASCII '0' = 48
   printf("result was <%d>\n", result);
   printf("char from result is = <%c>\n", c);
-  write(client->resp_fd, &c, 1);
+  write(client->resp_fd, &c, 1);  
+  if (errno == EBADF){return 2;}
 
   return 0;
 }
@@ -329,12 +375,18 @@ int kvs_unsubscribe_key(Client *client){
   int intr;
   char key[41] = {'\0'};
   int value = read_all(client->req_fd, key, 40, &intr);
+  if (errno == EBADF){
+    return 2; //get a new client
+  }
   if(intr == 1){
     fprintf(stderr,"Reading was interrupted while getting key for unsubscription\n");
     return 1;
   } else if (value == -1 || value == 0){
     fprintf(stderr,"Error while reading the key for unsubscription\n");
     return 1;
+  }
+  else if(value == 0){
+    return 2;
   }
   
   printf("n keys before = %d", client->n_keys);
@@ -353,8 +405,10 @@ int kvs_unsubscribe_key(Client *client){
   printf("n keys after= %d", client->n_keys);
   //m print message with result
   write(client->resp_fd, "4",1);
+  if (errno == EBADF){return 2;}
   char c = (char)(result + 48);//na ASCII '0' = 48
-  write(client->resp_fd, &c, 1);
+  value = (int)write(client->resp_fd, &c, 1);
+  if (errno == EBADF){return 2;}
 
   return 0;
 }

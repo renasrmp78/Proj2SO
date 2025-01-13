@@ -200,7 +200,7 @@ int kvs_disconnect(void) {
   printf("[KvsDisconnect] Entered kvs_disconnect\n");
   
   printf("[KvsDisconnect] Sended disconnect command to server\n");
-  write_str(req_fd ,"2");
+  write(req_fd ,"2", 1);
   
   char buff[2];
   printf("[KvsDisconnect] Waiting for message from server\n");
@@ -248,12 +248,19 @@ int kvs_disconnect(void) {
  */
 int kvs_subscribe(const char *key) {
   // send subscribe message to request pipe and wait for response in response
-  //m lets try
+  //EPIPE
+  //m lets try 
   if (write_all(req_fd, "3", 1) == -1 || write_all(req_fd ,key, 40) == -1){
+    if (errno == EPIPE){
+      return 2;
+    }
     fprintf(stderr, "Error writing subscribtion request to server\n");
   }
   char buff[3];
-  read_all(resp_fd, buff, 2, NULL);
+  if (read_all(resp_fd, buff, 2, NULL) == 0){
+    return 2;
+  }
+
   buff[2] = '\0';
   printf("buff = <%s>\n", buff);
   if (buff[0] != '3'){
@@ -275,11 +282,16 @@ int kvs_unsubscribe(const char *key) {
 
   //m lets try
   if (write_all(req_fd, "4", 1) == -1 || write_all(req_fd ,key, 40) == -1){
+    if (errno == EPIPE){
+      return 2;
+    }
     fprintf(stderr, "Error writing unsubscribtion request to server\n");
   }
 
   char buff[2];
-  read_all(resp_fd, buff, 2, NULL);
+  if (read_all(resp_fd, buff, 2, NULL) == 0){
+    return 2;
+  }
 
   if (buff[0] != '4'){
     fprintf(stderr, "Problem with server feedback about subscribing key\n");

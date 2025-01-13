@@ -11,6 +11,7 @@
 #include <semaphore.h>
 #include <string.h>
 #include <signal.h>
+#include <errno.h>
 
 #include "src/common/io.h"
 #include "src/common/constants.h"
@@ -49,7 +50,7 @@ char *jobs_directory = NULL;
 char *fifo_regist_name = NULL;//m
 char *regist_pipe_path_sig = NULL;
 
-
+sigset_t sigset_anf;
 
 int filter_job_files(const struct dirent *entry) {
   const char *dot = strrchr(entry->d_name, '.');
@@ -206,6 +207,16 @@ static int run_job(int in_fd, int out_fd, char *filename) {
 
 // frees arguments
 static void *get_file(void *arguments) {
+  sigset_t sigset;
+
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGUSR1);
+
+  if (pthread_sigmask(SIG_BLOCK, &sigset, NULL) != 0) {
+      fprintf(stderr, "Error blocking the SIGUSR1 signal\n");
+      pthread_exit(NULL);
+  }
+
   struct SharedData *thread_data = (struct SharedData *)arguments;
   DIR *dir = thread_data->dir;
   char *dir_name = thread_data->dir_name;
@@ -289,6 +300,16 @@ void *serve_client(){
   int req_fd, resp_fd, notif_fd;
   char subbuffer[41];
   
+  sigset_t sigset;
+
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGUSR1);
+
+  if (pthread_sigmask(SIG_BLOCK, &sigset, NULL) != 0) {
+      fprintf(stderr, "Error blocking the SIGUSR1 signal\n");
+      pthread_exit(NULL);
+  }
+
   while (1) {
     //wait for space to consum
     printf("[ServeC] Waiting for a client request\n");
@@ -334,7 +355,14 @@ void *serve_client(){
 
     printf("[ServeC] Openning requests fifo for reading\n");
     req_fd = open(subbuffer, O_RDONLY);
-    if (req_fd == -1) {
+    if (errno == ENOENT){ //if client desapeared
+      kvs_remove_client(client->id);
+      close(req_fd);
+      close(resp_fd);
+      close(notif_fd);
+      continue; //skipp for next client
+    }
+    else if (req_fd == -1) {
       fprintf(stderr, "Failed to open fifo <%s> for reading\n", subbuffer);
     }
     printf("[ServeC] Openned requests fifo successfully\n");
@@ -345,7 +373,14 @@ void *serve_client(){
     
     printf("[ServeC] Openning respostas fifo for writing\n");
     resp_fd = open(subbuffer, O_WRONLY);
-    if (resp_fd == -1) {
+    if (errno == ENOENT){ //if client desapeared
+      kvs_remove_client(client->id);
+      close(req_fd);
+      close(resp_fd);
+      close(notif_fd);
+      continue; //skipp for next client
+    }
+    else if (resp_fd == -1) {
       fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
     }
     printf("[ServeC] Openned respostas fifo successfully\n");
@@ -357,7 +392,14 @@ void *serve_client(){
 
     printf("[ServeC] Openning notifications fifo for writing\n");
     notif_fd = open(subbuffer, O_WRONLY);
-    if (notif_fd == -1) {
+    if (errno == ENOENT){ //if client desapeared
+      kvs_remove_client(client->id);
+      close(req_fd);
+      close(resp_fd);
+      close(notif_fd);
+      continue; //skipp for next client
+    }
+    else if (notif_fd == -1) {
       fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
     }
       printf("[ServeC] Openned notifications fifo successfully\n");
@@ -378,10 +420,17 @@ void *serve_client(){
 
       //m get commands
       char op;
-      read(req_fd, &op, 1);
+      int value = (int)read(req_fd, &op, 1);
+      if (value == 0){// client closed req_fd 
+        break;
+      } else if(value == -1){
+        fprintf(stderr, "Error reading commands from client\n");
+      }
+
       if (op == '2') {
         printf("[ServeC] Entering diconnect_client\n");
-        if(kvs_disconnect_client(client) != 0){
+        value = kvs_disconnect_client(client);
+        if(value != 0){
           fprintf(stderr, "Error disconnecting the client from the kvs table\n");
         }
         printf("[ServeC] back in serve_client from diconnect_client\n");
@@ -418,6 +467,12 @@ void *serve_client(){
 
 int get_requests(char *regist_pipe_path){ //estava void
   printf("[GetReq] Entered get_requests\n");
+
+  if (pthread_sigmask(SIG_UNBLOCK, &sigset_anf, NULL) != 0) {
+      fprintf(stderr, "Error unblocking SIGUSR1 \n");
+      return 1;
+  }
+
   //m create and open requests
   int error = 0;
   //init semaphores
@@ -441,6 +496,10 @@ int get_requests(char *regist_pipe_path){ //estava void
   // opening regist fifo
   printf("[GetReq] Opening regist fifo\n");
   int regist_fd = open(regist_pipe_path, O_RDONLY);
+  while (errno == EINTR){
+    errno = 0;
+    regist_fd = open(regist_pipe_path, O_RDONLY);
+  }
   if (regist_fd == -1) {
     fprintf(stderr,"Failed to open fifo <%s> for reading\n", regist_pipe_path);
     unlink(regist_pipe_path);
@@ -465,12 +524,13 @@ int get_requests(char *regist_pipe_path){ //estava void
   
   //getting requests
   
-  int intr = 0; //not used for now
   while (1){
+    int intr = 0; //not used for now
     char buffer[1 + 40 + 40 + 40 + 1] = {'\0'}; //for clients request info
     printf("[GetReq] Waiting for a regist request\n");
-    int value = (int)read_all(regist_fd, buffer, 1 + 40 + 40 + 40, intr);
-    if(value == -1 || intr == 1){
+    int value = (int)read_all(regist_fd, buffer, 1 + 40 + 40 + 40, &intr);
+    if(intr == 1){continue;}
+    else if(value == -1){
       fprintf(stderr,"Error, while reading request.\n");
     }else if(value == 0){
       printf("[GetReq] Client jclosed regist pipe \n");
@@ -495,19 +555,7 @@ int get_requests(char *regist_pipe_path){ //estava void
     printf("[GetReq] buffer resp = <%s>\n", path);
     strncpy(path, buffer + 81, 41);
     printf("[GetReq] buffer notif = <%s>\n", path);
-    if (intr == 1){
-      fprintf(stderr, "Reading from regist pipe was interupted\n");
-      error = 1;
-      break;
-    }
-    else if (value == -1){
-      fprintf(stderr, "There was an error while reading from regist pipe\n");
-      error = 1;
-      break;
-    }
-    else if (value == 0){
-      continue; //wait for the next client connection
-    }
+  
 
     //adding to prod-consum buffer
     //char *dup = strdup(buffer);
@@ -613,8 +661,30 @@ void sigtstp_handler() {
     exit(0);
 }
 int main(int argc, char **argv) {
+  // SIGNALS
   printf("[Main] Entered Main\n");
-  signal(SIGTSTP, sigtstp_handler);
+
+  struct sigaction sa;
+
+  // Set up the SIGUSR1 handler
+  sa.sa_handler = sigusr1_handler;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask); // No additional signals to block in the handler
+  if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+      fprintf(stderr, "Error, couldn't set the handler for SIGUSR1\n");
+      return 1;
+  }
+
+  sigemptyset(&sigset_anf);
+  sigaddset(&sigset_anf, SIGUSR1);
+  if (pthread_sigmask(SIG_BLOCK, &sigset_anf, NULL) != 0) {
+      perror("pthread_sigmask - block");
+      return 1;
+  }
+  //TEMPORARY HANDLER FOR ctrl-z
+  //signal(SIGTSTP, sigtstp_handler);
+
+  //END SIGNALS
   if (argc < 4) {
     write_str(STDERR_FILENO, "Usage: ");
     write_str(STDERR_FILENO, argv[0]);

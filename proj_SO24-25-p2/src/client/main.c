@@ -26,6 +26,7 @@ static void *track_notif(void *arg){
 
     if (result == 0){
       printf("[TrackN] Leaving track_notif\n");
+      kill(getpid(), SIGINT);
       break;
     }
     else if (result == -1){
@@ -77,9 +78,9 @@ int main(int argc, char *argv[]) {
   strncat(resp_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
   strncat(notif_pipe_path, argv[1], strlen(argv[1]) * sizeof(char));
 
-  
+  int value;
+
   // TODO open pipes
-  
   printf("[Main] CONNECTING COMMAND\n");
   int notif_pipe;
   if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path,
@@ -131,7 +132,16 @@ int main(int argc, char *argv[]) {
       }
 
       printf("[Main] Key to subscribe: <%s>\n", keys[0]);
-      if (kvs_subscribe(keys[0])) {
+      value = kvs_subscribe(keys[0]);
+      if (value == 2){
+        kvs_disconnect();
+        printf("[Main] Joining notification thread\n");
+        if (pthread_join(notif_thread, NULL) != 0) {
+          fprintf(stderr, "Failed to join notification thread\n");
+        }
+        return 0;
+      }
+      else if(value == 1){
         fprintf(stderr, "Command subscribe failed\n");
       }
 
@@ -147,7 +157,16 @@ int main(int argc, char *argv[]) {
         continue;
       }
 
-      if (kvs_unsubscribe(keys[0])) {
+      value = kvs_unsubscribe(keys[0]);
+      if (value == 2){
+        printf("[Main] Joining notification thread\n");
+        if (pthread_join(notif_thread, NULL) != 0) {
+          fprintf(stderr, "Failed to join notification thread\n");
+        }
+        kvs_disconnect();
+        return 0;
+      }
+      else if(value == 1){
         fprintf(stderr, "Command subscribe failed\n");
       }
 

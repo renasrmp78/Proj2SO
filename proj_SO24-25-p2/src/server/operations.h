@@ -2,6 +2,7 @@
 #define KVS_OPERATIONS_H
 
 #include <stddef.h>
+#include <errno.h>
 
 #include "constants.h"
 #include "client_str.h"
@@ -87,5 +88,14 @@ int kvs_find(const char *key);
  * clients in the server
  */
 void add_Client(Client *client);
+
+/** Deals with SIGUSR1 signal */
+void sigusr1_handler();
+
+/** Removes all clients from server */
+void remove_all_clients();
+
+void kvs_remove_client(int id);
+
 
 #endif // KVS_OPERATIONS_H
