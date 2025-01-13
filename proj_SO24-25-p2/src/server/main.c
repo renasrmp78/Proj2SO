@@ -469,7 +469,7 @@ int get_requests(char *regist_pipe_path){ //estava void
   while (1){
     char buffer[1 + 40 + 40 + 40 + 1] = {'\0'}; //for clients request info
     printf("[GetReq] Waiting for a regist request\n");
-    int value = (int)read_all(regist_fd, buffer, 1 + 40 + 40 + 40, intr);
+    int value = (int)read_all(regist_fd, buffer, 1 + 40 + 40 + 40, NULL);
     if(value == -1 || intr == 1){
       fprintf(stderr,"Error, while reading request.\n");
     }else if(value == 0){
