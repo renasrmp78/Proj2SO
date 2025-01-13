@@ -285,6 +285,7 @@ int kvs_subscribe_key(Client *client){
     fprintf(stderr,"Reading was interrupted while getting key for subscription\n");
     return 1;
   } else if (value == -1 || value == 0){
+    printf("errno =%d\n", errno);
     fprintf(stderr,"Error while reading the key for subscription\n");
     return 1;
   }

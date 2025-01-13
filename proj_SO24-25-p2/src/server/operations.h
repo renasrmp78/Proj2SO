@@ -2,7 +2,7 @@
 #define KVS_OPERATIONS_H
 
 #include <stddef.h>
-
+#include <errno.h>
 #include "constants.h"
 #include "client_str.h"
 #include "src/common/constants.h"
