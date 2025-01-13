@@ -94,14 +94,11 @@ void print_str_list(Node_str *head){
 
 Client *create_client(){
     Client *client = (Client *)malloc(sizeof(Client));
-    printf("[CreateClient] in lock\n");
     pthread_mutex_lock(&lock);
-    printf("[CreateClient] passed lock\n");
 
     client->id = client_id;
     client_id++;
     pthread_mutex_unlock(&lock);
-    printf("[CreateClient] unlocking\n");
 
     client->n_keys = 0;
     client->req_fd = -1;
@@ -115,33 +112,23 @@ Client *create_client(){
 
 
 void append_client(Client **head, Client *client){
-    printf("[AppendClient] Entered append_client\n");
     if(*head == NULL){
-        printf("[AppendClient] list is null\n");
         *head = client;
-        printf("[AppendClient] Leaving append_client\n");
         return;
     }
 
-    printf("[AppendClient] printg clients in Clients_list before\n");
     Client *current = *head;
     while(current->next != NULL){
-        printf("[AppendClient] client:%d\n", current->id);
         current = current->next;
     }
-    printf("[AppendClient] client:%d\n", current->id);
 
     current->next = client;
 
-    printf("[AppendClient] printg clients in Clients_list after");
     current = *head;
     while(current->next != NULL){
-        printf("[AppendClient] client:%d\n", current->id);
         current = current->next;
     }
-    printf("[AppendClient] client:%d\n", current->id);
 
-    printf("[AppendClient] Leaving append_client\n");
     return;
 }
 

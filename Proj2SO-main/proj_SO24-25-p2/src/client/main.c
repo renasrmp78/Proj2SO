@@ -13,19 +13,15 @@
 #include "src/server/io.h"
 
 static void *track_notif(void *arg){
-  printf("[TrackN] Entered track_notif\n");
   int notif_fd = *(int*)arg;
   char key[41], value[41];
   int intr;
 
   while (1){
-    printf("[TrackN] Waiting for notification\n");
     int result = 0;
     result = read_all(notif_fd, key, 41, &intr);
-    printf("[TrackN] key received\n");
 
     if (result == 0){
-      printf("[TrackN] Leaving track_notif\n");
       kill(getpid(), SIGINT);
       break;
     }
@@ -37,7 +33,6 @@ static void *track_notif(void *arg){
     }
     
     result = read_all(notif_fd, value, 41, &intr);
-    printf("[TrackN] value received\n");
 
     if(result == 0 || result == -1){
       printf("Error while reading from notifications\n");
@@ -46,7 +41,6 @@ static void *track_notif(void *arg){
       fprintf(stderr, "Reading in the notification was inturupted\n");
     }
 
-    printf("[TrackN] Writing notification in stdout\n");
     write_str(STDOUT_FILENO, "(");
     write_str(STDOUT_FILENO, key);
     write_str(STDOUT_FILENO, ",");
@@ -81,14 +75,12 @@ int main(int argc, char *argv[]) {
   int value;
 
   // TODO open pipes
-  printf("[Main] CONNECTING COMMAND\n");
   int notif_pipe;
   if (kvs_connect(req_pipe_path, resp_pipe_path, server_pipe_path,
       notif_pipe_path, &notif_pipe) != 0){
     fprintf(stderr, "Failed to connect to server\n");
     return 1;
   }
-  printf("[Main] Creating notification thread\n");
   //m still have to create threads to do the operations that
   //m are responsible for receiving the notifications and sending
   //m it to the stdout: I thing notif_pipe is for here
@@ -98,32 +90,25 @@ int main(int argc, char *argv[]) {
       0) {
     fprintf(stderr, "Failed to create notifications thread\n");
   }
-  printf("[Main] Notification thread created successfully\n");
   //m acho que a tarefa principal deverá ficar a realizar este
   //m while, tmb deve fazer os respetivos pedidos ao server
   //m e receber as respetivas respostas
   while (1) {
-    printf("[Main] Waiting for next command\n");
 
     switch (get_next(STDIN_FILENO)) {
     case CMD_DISCONNECT:
-      printf("[Main] DISCONNECT COMMAND\n");
       if (kvs_disconnect() != 0) {
         fprintf(stderr, "Failed to disconnect to the server\n");
         return 1;
       }
-      printf("[Main] back to Main from kvs_disconnect\n");
       // TODO: end notifications thread
       //m lets put the join i think
-      printf("[Main] Joining notification thread\n");
       if (pthread_join(notif_thread, NULL) != 0) {
         fprintf(stderr, "Failed to join notification thread\n");
       }
-      printf("[Main] Disconnected from server\n");
       return 0;
 
     case CMD_SUBSCRIBE:
-      printf("[Main] SUBSCRIBE COMMAND\n");
 
       num = parse_list(STDIN_FILENO, keys, 1, MAX_STRING_SIZE);
       if (num == 0) {
@@ -131,17 +116,14 @@ int main(int argc, char *argv[]) {
         continue;
       }
 
-      printf("[Main] Key to subscribe: <%s>\n", keys[0]);
       value = kvs_subscribe(keys[0]);
       if(value == 1){
         fprintf(stderr, "Command subscribe failed\n");
       }
 
-      printf("[Main] Leaving Subscribe command\n");
       break;
 
     case CMD_UNSUBSCRIBE:
-      printf("[Main] UNSUBSCRIBE COMMAND\n");
 
       num = parse_list(STDIN_FILENO, keys, 1, MAX_STRING_SIZE);
       if (num == 0) {
@@ -154,7 +136,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Command subscribe failed\n");
       }
 
-      printf("[Main] Leaving unsubscribe command\n");
       break;
 
     case CMD_DELAY:

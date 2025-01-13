@@ -117,9 +117,7 @@ int subscribe_pair(HashTable *ht, const char *key, int id){
 
   while(keyNode != NULL){
     if(strcmp(keyNode->key, key) == 0){
-      print_int_list(keyNode->ids);
       append_node(&(keyNode->ids), id); //m not sure
-      print_int_list(keyNode->ids);
       return 1;
     }
     keyNode = keyNode->next;
@@ -135,17 +133,9 @@ int unsubscribe_pair(HashTable *ht, const char *key, int id){
 
   while(keyNode != NULL){ //percorre ate encontrar a key certa
     if(strcmp(keyNode->key, key) == 0){
-      printf("in right key\n");
-      print_int_list(keyNode->ids);
       if(remove_node(&(keyNode->ids), id) == 1){ //m if existed
-        printf("here1\n");
-        print_int_list(keyNode->ids);
         return 0;
-      } else{
-        printf("here2\n");
-        print_int_list(keyNode->ids);
       }
-      printf("really ?? breaking\n");
       break; //every key are unique
     }
     keyNode = keyNode->next;
@@ -168,16 +158,8 @@ int find_pair(HashTable *ht, const char *key){
 }
 
 void get_clients_ids(HashTable *ht, char *key, Node **lk_lst){
-  
-  printf("key = <%s>", key);
-  printf("c1\n");
   int index = hash(key);
-  printf("<%d>", index);
-  printf("c2\n");
-  if(ht == NULL){printf("hell nah\n");}
-  if((ht->table)[index] == NULL){printf("hell nah2\n");}
   *lk_lst = (((ht->table)[index])->ids);
-  printf("c3\n");
 }
 
 
