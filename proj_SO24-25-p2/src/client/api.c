@@ -102,31 +102,28 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   //m open connections
   //m connect to server
   printf("path server <%s>\n", server_pipe_path);
-  printf("za\n");
+  printf("[C]opening server fifo\n");
   server_fd = open(server_pipe_path, O_WRONLY);
   if (server_fd == -1) {
     perror("nao sei");
     fprintf(stderr,"Failed to open fifo <%s> for writing\n", server_pipe_path);
     return 1;
   }
-  printf("zb\n");
+  printf("[C]opened successfully\n");
   //m We now probably need to send to the server the name of the fifos we just created             !!!
   char buffer[1 + 40 + 40 + 40 + 1];
   snprintf(buffer, 2, "1"); //he needs the secont char for this.
-  printf("zc\n");
 
   //each time the '\0' char will be overwriten by the next path
   char path[41];
-  strncpy(path, req_pipe_path, 41);
-  strncpy(buffer + 1, path, 41);
-  printf("zd\n");
+  //strncpy(path, req_pipe_path, 41);
+  strncpy(buffer + 1, req_pipe_path, 41);
+  //strncpy(path, resp_pipe_path, 41);
+  strncpy(buffer + 1 + 40, resp_pipe_path, 41);
+  //strncpy(path, notif_pipe_path, 41);
+  strncpy(buffer + 1 + 40 + 40, notif_pipe_path, 41);
 
-  strncpy(path, resp_pipe_path, 41);
-  strncpy(buffer + 1 + 40, path, 41);
-  printf("ze\n");
-
-  strncpy(path, notif_pipe_path, 41);
-  strncpy(buffer + 1 + 40 + 40, path, 41);
+  printf("[C] paths in buffer\n");
 
   printf("buffer= <%s>\n", buffer);
   strncpy(path, buffer + 41, 41);
@@ -137,7 +134,8 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
   write_all(server_fd, buffer, 1 + 40 + 40 + 40);
   //m Until the server connects to the respective fifos we will send, our program will
   //m bbe blocked in these next opens
-  printf("zf\n");
+  printf("[C] Everithing sended for server.\n");
+  printf("[C] Waiting for server to accept.\n");
 
   //m connect to requests pipe
   req_fd = open(req_pipe_path, O_WRONLY);
@@ -145,7 +143,8 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
     fprintf(stderr, "Failed to open fifo <%s> for writing\n", req_pipe_path);
     return 1;
   }
-  printf("zg\n");
+  printf("[C] Server opened requests pipe.\n");
+
   
   //m connect to answers pipe
   resp_fd = open(resp_pipe_path, O_RDONLY);
@@ -153,28 +152,31 @@ int kvs_connect(char const *req_pipe_path, char const *resp_pipe_path,
     fprintf(stderr, "Failed to open fifo <%s> for reading\n", resp_pipe_path);
     return 1;
   }
-  printf("zh\n");
+  printf("[C] Server opened respostas pipe.\n");
+
+
   //m connect to notifications pipe
   notif_fd = open(notif_pipe_path, O_RDONLY);
   if (notif_fd == -1) {
     fprintf(stderr, "Failed to open fifo <%s> for reading\n", notif_pipe_path);
     return 1;
   }
+  printf("[C] Server opened notifications pipe.\n");
+
   *notif_pipe = notif_fd; //m secalhar vai ser necessario
-  printf("zi\n");
-  
   char buff[3];
-  read_all(resp_fd, buff, 2, NULL);
+  read_all(resp_fd, buff, 2, NULL); //could ve been right after answer connection
+  
+  printf("[C] Got server responce about CONNECTION\n");
 
   buff[2] = '\0';
 
-  printf("buff<%s>\n", buff);
-  printf("zii\n");
+  printf("[C] Server response = <%s>\n", buff);
   if (buff[0] != '1'){
     fprintf(stderr, "Problem with server feedback about connecting\n");
     return 1;
   }
-  printf("zj\n");
+  printf("[C] Right OP confirmed\n");
   print_answer(buff[1], buff[0]);
 
   return 0;
@@ -195,10 +197,17 @@ int kvs_disconnect(void) {
   //m nos exemplos do lab, não verificam erro neste tipo de close
   
   //m Communicate with server
+  printf("[KvsDisconnect] Entered kvs_disconnect\n");
+  
+  printf("[KvsDisconnect] Sended disconnect command to server\n");
   write_str(req_fd ,"2");
+  
   char buff[2];
-  read_all(resp_fd, buff, 2, NULL);
+  printf("[KvsDisconnect] Waiting for message from server\n");
+  read(resp_fd, buff, 2);
+  printf("[KvsDisconnect] Message from server <%s>\n", buff);
 
+  
   if (buff[0] != '2'){
     fprintf(stderr, "Problem with server feedback about desconnecting\n");
     return 1;
@@ -206,11 +215,14 @@ int kvs_disconnect(void) {
 
   print_answer(buff[1], buff[0]);
 
+  printf("[KvsDisconnect] Closing fifos \n");
+  
   close(server_fd);
   close(req_fd);
   close(resp_fd);
   close(notif_fd);
 
+  printf("[KvsDisconnect] Destroying fifos \n");
   if(unlink(req_pipe_path_c) != 0){
     fprintf(stderr,"Failed to destroy fifo <%s>\n", req_pipe_path_c);
     return 1;
@@ -226,6 +238,7 @@ int kvs_disconnect(void) {
     return 1;
   }
 
+  printf("[KvsDisconnect] Leaving kvs_disconnect\n");
   return 0;
 
 }

@@ -275,112 +275,6 @@ static void *get_file(void *arguments) {
 }
 
 
-/** m
- * This function opens the pipes the client created,
- * and deals with client requests and answers
- * 
- * @param  buffer buffer with connect operation
- * @return 0 if everithing well, and the client disconnected
- * @return 1 if some problem
- */
-
-/*int serve_client_old(char *buffer){
-  printf("cc1\n");
-  int req_fd, resp_fd, notif_fd;
-  char subbuffer[41];
-  client_init(&client);
-  printf("cc2\n");
-
-  if (buffer[0] != '1'){
-    fprintf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);
-    return 1;
-  }
-  printf("cc3\n");
-
-  //m connect to requests pipe
-  strncpy(subbuffer, buffer + 1, 40);
-  subbuffer[40] = '\0';
-  req_fd = open(subbuffer, O_RDONLY);
-  if (req_fd == -1) {
-    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
-    return 1;
-  }
-  printf("cc4\n");
-  
-  //m connect to answers pipe
-  strncpy(subbuffer, buffer + 1 + 40, 40);
-  subbuffer[40] = '\0';
-  resp_fd = open(subbuffer, O_WRONLY);
-  if (resp_fd == -1) {
-    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
-    close(req_fd);
-    return 1;
-  }
-  printf("cc5\n");
-  
-  //m connect to notifications pipe
-  strncpy(subbuffer, buffer + 1 + 40 + 40, 40);
-  subbuffer[40] = '\0';
-  notif_fd = open(subbuffer, O_WRONLY);
-  if (notif_fd == -1) {
-    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
-    close(req_fd);
-    close(resp_fd);
-    return 1;
-  }
-  printf("cc6\n");
-
-  write(resp_fd, "10", 2);
-
-  client.req_fd = req_fd;
-  client.resp_fd = resp_fd;
-  client.notif_fd = notif_fd;
-
-  int error = 0;
-  while (1){
-    printf("cc7\n");
-
-    //m get commands
-    char op;
-    read(req_fd, &op, 1);
-    if (op == '2') {
-      if(kvs_disconnect_client(&client) != 0){
-        fprintf(stderr, "Error disconnecting the client from the kvs table\n");
-        error = 1;
-      }
-      break;
-    }
-    else if (op == '3') {
-      if(kvs_subscribe_key(&client) != 0){
-        error = 1;
-        break;
-      }
-    }
-    else if (op == '4') {
-      if(kvs_unsubscribe_key(&client) != 0){
-        error = 1;
-        break;
-      }
-    }
-    else{
-      fprintf(stderr,
-        "Wrong operation number, should've been 1, 2 or 3 but was <%c>\n", op);
-      error = 1;
-      break;
-    }
-  }
-
-  //m destroy list of keys of the client
-  destroy_str_list(client.keys);
-
-  //m not sure, but i think it makes sense to not only clean subscribtions but also close pipes connect..
-  close(req_fd);
-  close(resp_fd);
-  close(notif_fd);
-
-  return error;
-  }*/
-
 
 /** m
  * This function opens the pipes the client created,
@@ -391,210 +285,149 @@ static void *get_file(void *arguments) {
  * @return 1 if some problem
  */
 void *serve_client(){
+  printf("[ServeC] Entered serve_client\n");
   int req_fd, resp_fd, notif_fd;
   char subbuffer[41];
-
-  //wait for space to consum
-  sem_wait(&sem_consum);
-  pthread_mutex_lock(&sem_lock);
   
-  //get a client info request from the buffer
-  char buffer[1 + 40 + 40 + 40 + 1];
-  printf("iconsum = %d\n", i_consum);
-  memcpy(buffer, buffer_p_c[i_consum], 1 + 40 + 40 + 40 + 1); //cant forget to free at the end
-  i_consum = (i_consum + 1)%MAX_SESSION_COUNT;
-  printf("iconsum = %d\n", i_consum);
-  printf("buffer= <%s>\n", buffer);
-  char path[41];
-  strncpy(path, buffer + 41, 41);
-  printf("buffer= <%s>\n", path);
-  strncpy(path, buffer + 81, 41);
-  printf("buffer= <%s>\n", path);
-  for(int i = 0; i< 121; i++){
-    printf("i: %d <%c>\n", i, buffer[i]);
-  }
-
-  Client *client = create_client(); //this function will create a client and add it to a list of clients online, it returns a pointer to it
-  add_Client(client); //adds client to server list of clients in operations
-  printf("cc1\n");
-  
-  //client_init(&client);
-  printf("cc2\n");
-
-  if (buffer[0] != '1'){
-    fprintf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);
-  }
-  printf("cc3\n");
-
-  //m connect to requests pipe
-  strncpy(subbuffer, buffer + 1, 40);
-  subbuffer[40] = '\0';
-  req_fd = open(subbuffer, O_RDONLY);
-  if (req_fd == -1) {
-    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
-  }
-  printf("cc4\n");
-  
-  //m connect to answers pipe
-  strncpy(subbuffer, buffer + 1 + 40, 40);
-  subbuffer[40] = '\0';
-  resp_fd = open(subbuffer, O_WRONLY);
-  if (resp_fd == -1) {
-    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
-  }
-  printf("cc5\n");
-  
-  //m connect to notifications pipe
-  strncpy(subbuffer, buffer + 1 + 40 + 40, 40);
-  subbuffer[40] = '\0';
-  notif_fd = open(subbuffer, O_WRONLY);
-  if (notif_fd == -1) {
-    fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
-  }
-  printf("cc6\n");
-  
-  //free buffer that was created by prod using strdup
-  //free(buffer); 
-
-  //give feedback to client about successful connection to server
-  write(resp_fd, "10", 2);
-
-  client->req_fd = req_fd;
-  client->resp_fd = resp_fd;
-  client->notif_fd = notif_fd;
-  
-  while (1){
-    printf("cc7\n");
-
-    //m get commands
-    char op;
-    read(req_fd, &op, 1);
-    if (op == '2') {
-      if(kvs_disconnect_client(client) != 0){
-        fprintf(stderr, "Error disconnecting the client from the kvs table\n");
-      }
-      break;
-    }
-    else if (op == '3') {
-      if(kvs_subscribe_key(client) != 0){
-        break;
-      }
-    }
-    else if (op == '4') {
-      if(kvs_unsubscribe_key(client) != 0){
-        break;
-      }
-    }
-    else{
-      fprintf(stderr,
-        "Wrong operation number, should've been 1, 2 or 3 but was <%c>\n", op);
-      break;
-    }
-  }
-
-
-  //m not sure, but i think it makes sense to not only clean subscribtions but also close pipes connect..
-  close(req_fd);
-  close(resp_fd);
-  close(notif_fd);
-
-  return NULL;
-  }
-
-/**
- * This function handles the connecting requests,
- * and then handles the client(its requests and answers)
- */
-
-/*int get_requests_old(char *regist_pipe_path){ //estava void
-  //m create and open requests
-  int error = 0;
-  //init semaphores
-  //creating regist fifo
-  printf("aaa\n");
-  printf("aa\n");
-  umask(0);
-  if (mkfifo(regist_pipe_path, 0666) == -1) {
-    perror("mkfifo failed");
-    if (errno != EEXIST) {
-      fprintf(stderr, "Failed to create regists thread\n");
-      return 1;
-    }
-    printf("ERROR\n");
-  }
-  printf("a\n");
-
-  // opening regist fifo
-  printf("regist path= <%s>\n", regist_pipe_path);
-  int regist_fd = open(regist_pipe_path, O_RDONLY);
-  printf("ab\n");
-  if (regist_fd == -1) {
-    fprintf(stderr,"Failed to open fifo <%s> for reading\n", regist_pipe_path);
-    unlink(regist_pipe_path);
-    return 1;
-  }
-  printf("b\n");
-
-  //getting requests
-  char buffer[1 + 40 + 40 + 40]; //for clients request info
-  int intr = 0; //not used for now
-  while (1){ 
-    //wait for space to add new request
+  while (1) {
+    //wait for space to consum
+    printf("[ServeC] Waiting for a client request\n");
+    sem_wait(&sem_consum);
+    pthread_mutex_lock(&sem_lock);
+    printf("[ServeC] Permision to get client request. Blocking prod-consum mutex\n");
     
-    //int value = read_all(regist_fd, buffer, 1 + 40 + 40 + 40, &intr);
-    int value = (int)read(regist_fd, buffer, 1 + 40 + 40 + 40);
-    if (intr == 1){
-      fprintf(stderr, "Reading from regist pipe was interupted\n");
-      error = 1;
-      break;
+    
+    //get a client info request from the buffer
+    char buffer[1 + 40 + 40 + 40 + 1];
+    printf("[ServeC] Index of consumer before= %d\n", i_consum);
+    printf("[ServeC] Getting client request from prod-consum buffer to a buffer\n");
+    memcpy(buffer, buffer_p_c[i_consum], 1 + 40 + 40 + 40 + 1); //cant forget to free at the end
+    i_consum = (i_consum + 1)%MAX_SESSION_COUNT;
+    printf("[ServeC] Index of consumer after= %d\n", i_consum);
+
+    printf("[ServeC] Unlocking prod-consum mutex\n");
+    pthread_mutex_unlock(&sem_lock);
+    sem_post(&sem_prod); //new client to attend
+    printf("[ServeC] 1 space added to producer semaphore\n");
+    
+    char path[41];
+    printf("[ServeC] buffer= <%s>\n", buffer);
+    strncpy(path, buffer + 41, 41);
+    printf("[ServeC] buffer= <%s>\n", path);
+    strncpy(path, buffer + 81, 41);
+    printf("[ServeC] buffer= <%s>\n", path);
+
+    printf("[ServeC] Creating client object\n");
+    Client *client = create_client(); //this function will create a client and add it to a list of clients online, it returns a pointer to it
+    printf("[ServeC] Client created. Adding it to the list.\n");
+    add_Client(client); //adds client to server list of clients in operations
+    printf("[ServeC] Client added to clients list\n");
+
+
+    printf("[ServeC] Getting buffer information\n");
+    if (buffer[0] != '1'){
+      fprintf(stderr, "Wrong operation number, should've been <1> was <%c>\n", buffer[0]);
     }
-    else if (value == -1){
-      fprintf(stderr, "There was an error while reading from regist pipe\n");
-      error = 1;
-      break;
+    //m connect to requests pipe
+    strncpy(subbuffer, buffer + 1, 40);
+    subbuffer[40] = '\0';
+
+    printf("[ServeC] Openning requests fifo for reading\n");
+    req_fd = open(subbuffer, O_RDONLY);
+    if (req_fd == -1) {
+      fprintf(stderr, "Failed to open fifo <%s> for reading\n", subbuffer);
     }
-    else if (value == 0){
-      continue; //wait for the next client connection
+    printf("[ServeC] Openned requests fifo successfully\n");
+
+    //m connect to answers pipe
+    strncpy(subbuffer, buffer + 1 + 40, 40);
+    subbuffer[40] = '\0';
+    
+    printf("[ServeC] Openning respostas fifo for writing\n");
+    resp_fd = open(subbuffer, O_WRONLY);
+    if (resp_fd == -1) {
+      fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
+    }
+    printf("[ServeC] Openned respostas fifo successfully\n");
+
+    
+    //m connect to notifications pipe
+    strncpy(subbuffer, buffer + 1 + 40 + 40, 40);
+    subbuffer[40] = '\0';
+
+    printf("[ServeC] Openning notifications fifo for writing\n");
+    notif_fd = open(subbuffer, O_WRONLY);
+    if (notif_fd == -1) {
+      fprintf(stderr, "Failed to open fifo <%s> for writing\n", subbuffer);
+    }
+      printf("[ServeC] Openned notifications fifo successfully\n");
+    
+    //free buffer that was created by prod using strdup
+    //free(buffer); 
+
+    //give feedback to client about successful connection to server
+    printf("[ServeC] Sending successes connection message to client\n");
+    write(resp_fd, "10", 2);
+
+    client->req_fd = req_fd;
+    client->resp_fd = resp_fd;
+    client->notif_fd = notif_fd;
+    
+    while (1){
+      printf("[ServeC] Waiting for a command(request) from client\n");
+
+      //m get commands
+      char op;
+      read(req_fd, &op, 1);
+      if (op == '2') {
+        printf("[ServeC] Entering diconnect_client\n");
+        if(kvs_disconnect_client(client) != 0){
+          fprintf(stderr, "Error disconnecting the client from the kvs table\n");
+        }
+        printf("[ServeC] back in serve_client from diconnect_client\n");
+        break;
+      }
+      else if (op == '3') {
+        if(kvs_subscribe_key(client) != 0){
+          break;
+        }
+      }
+      else if (op == '4') {
+        if(kvs_unsubscribe_key(client) != 0){
+          break;
+        }
+      }
+      else{
+        fprintf(stderr,
+          "Wrong operation number, should've been 1, 2 or 3 but was <%c>\n", op);
+        break;
+      }
     }
 
-    printf("c\n");
-    //putting info in the prod-consum buffer
-    if (serve_client(buffer) != 0){
-      fprintf(stderr,"There was an error with the client\n");
-      error = 1;
-      break;
-    }
-    printf("d\n");
+    //m not sure, but i think it makes sense to not only clean subscribtions but also close pipes connect..
+    printf("[ServeC] closing fifos client sent\n");
 
-    printf("wait for new client request\n");
-
+    close(req_fd);
+    close(resp_fd);
+    close(notif_fd);
+    
+    printf("[ServeC] Finished with this client\n");
   }
-
-  // Criar a estrutura para passar os dados de clientes
-  // Passar regist_fd e dir para a função de despachar threads
-  // Fechar e remover o FIFO de registo
-  close(regist_fd);
-
-  if(unlink(regist_pipe_path) != 0){
-    fprintf(stderr, "Failed to destroy fifo <%s>\n", regist_pipe_path);
-    return 1;
-  }
-  
-  return error;
-}*/
+}
 
 
 int get_requests(char *regist_pipe_path){ //estava void
+  printf("[GetReq] Entered get_requests\n");
   //m create and open requests
   int error = 0;
   //init semaphores
+  printf("[GetReq] Inicializing semaphores\n");
   sem_init(&sem_prod, 0, MAX_SESSION_COUNT);
   sem_init(&sem_consum, 0, 0);
 
   //creating regist fifo
-  printf("aaa\n");
-  printf("aa\n");
-  umask(0);
+  //umask(0);
+  printf("[GetReq] Creating regists fifo\n");
   if (mkfifo(regist_pipe_path, 0666) == -1) {
     perror("mkfifo failed");
     if (errno != EEXIST) {
@@ -603,49 +436,65 @@ int get_requests(char *regist_pipe_path){ //estava void
     }
     printf("ERROR\n");
   }
-  printf("a\n");
+  printf("[GetReq] Regist fifo created successfully\n");
 
   // opening regist fifo
-  printf("regist path= <%s>\n", regist_pipe_path);
+  printf("[GetReq] Opening regist fifo\n");
   int regist_fd = open(regist_pipe_path, O_RDONLY);
-  printf("ab\n");
   if (regist_fd == -1) {
     fprintf(stderr,"Failed to open fifo <%s> for reading\n", regist_pipe_path);
     unlink(regist_pipe_path);
     return 1;
   }
-  printf("b\n");
+  printf("[GetReq] Regist fifo opened successfully\n");
 
+  printf("[GetReq] Creating threads to manage clients\n");
   int thread_id;
   //sending client handling threads
   pthread_t threads[MAX_SESSION_COUNT];
-  for (size_t i = 0; i < max_threads; i++) {
+  for (size_t i = 0; i < MAX_SESSION_COUNT; i++) {
     if (pthread_create(&threads[i], NULL, serve_client, NULL) != 0) {
       fprintf(stderr, "Failed to create thread %zu\n", i);
       error = 1;
-      continue;
+      break;
     }
     thread_id = (int)i;
-    printf("Thread [%d] starting\n", thread_id);
+    printf("[GetReq] Thread [%d] starting\n", thread_id);
   }
+  printf("[GetReq] %d threads created\n", thread_id + 1);
   
   //getting requests
-  char buffer[1 + 40 + 40 + 40 + 1]; //for clients request info
+  
   int intr = 0; //not used for now
-  while (1){ 
+  while (1){
+    char buffer[1 + 40 + 40 + 40 + 1] = {'\0'}; //for clients request info
+    printf("[GetReq] Waiting for a regist request\n");
+    int value = (int)read_all(regist_fd, buffer, 1 + 40 + 40 + 40, intr);
+    if(value == -1 || intr == 1){
+      fprintf(stderr,"Error, while reading request.\n");
+    }else if(value == 0){
+      printf("[GetReq] Client jclosed regist pipe \n");
+      continue;
+    }
+    buffer[121] = '\0';
+    printf("[GetReq] Regist request received\n");
+
     //wait for space to add new request
+    printf("[GetReq] In production semaphore\n");
     sem_wait(&sem_prod);
     pthread_mutex_lock(&sem_lock);
+    printf("[GetReq] Blocking prod-consum mutex\n");
+
     
     //int value = read_all(regist_fd, buffer, 1 + 40 + 40 + 40, &intr);
-    int value = (int)read(regist_fd, buffer, 1 + 40 + 40 + 40);
-    buffer[121] = '\0';
-    printf("[%d]buffer= <%s>\n", thread_id, buffer);
+    
+    printf("[GetReq] Printing paths in buffer\n");
     char path[41];
+    printf("[GetReq] buffer req = <%s>\n", buffer);
     strncpy(path, buffer + 41, 41);
-    printf("[%d]buffer= <%s>\n", thread_id, path);
+    printf("[GetReq] buffer resp = <%s>\n", path);
     strncpy(path, buffer + 81, 41);
-    printf("[%d]buffer= <%s>\n", thread_id, path);
+    printf("[GetReq] buffer notif = <%s>\n", path);
     if (intr == 1){
       fprintf(stderr, "Reading from regist pipe was interupted\n");
       error = 1;
@@ -663,27 +512,30 @@ int get_requests(char *regist_pipe_path){ //estava void
     //adding to prod-consum buffer
     //char *dup = strdup(buffer);
     
-
+    printf("[GetReq] Adding a client request to buffer of prod-consum\n");
+    printf("[GetReq] Indice of production = %d at the moment\n", i_prod);
     memcpy(buffer_p_c[i_prod], buffer, 1 + 40 + 40 + 40 + 1);
 
-    printf("[%d]buff_p_c= <%s>\n", thread_id, buffer_p_c[i_prod]);
+    printf("[GetReq] Confirming paths in prod-consum buffer\n");
+    printf("[GetReq] buff_p_c req= <%s>\n", buffer_p_c[i_prod]);
     strncpy(path, buffer_p_c[i_prod] + 41, 41);
-    printf("[%d]buff_p_c= <%s>\n", thread_id, path);
+    printf("[GetReq] buff_p_c resp= <%s>\n", path);
     strncpy(path, buffer_p_c[i_prod] + 81, 41);
-    printf("[%d]buff_p_c= <%s>\n", thread_id, path);
+    printf("[GetReq] buff_p_c notif= <%s>\n", path);
 
-    printf("[%d]iprod = %d\n", thread_id, i_prod);
+    
     i_prod = (i_prod + 1)%MAX_SESSION_COUNT;
-    printf("[%d]iprod = %d\n", thread_id, i_prod);
-    
-    
-    
-    printf("[%d]c\n", thread_id);
+    printf("[GetReq] Indice of production = %d atualized\n",i_prod);
 
+    
+    
+
+    printf("[GetReq] Unlocking prod-consum mutex\n");
     pthread_mutex_unlock(&sem_lock);
     sem_post(&sem_consum); //new client to attend
-    
-    printf("[%d]wait for new client request\n", thread_id);
+    printf("[GetReq] 1 element added to consumer semaphore\n");
+  
+    printf("[GetReq]wait for new client request\n");
   }
   
   
@@ -709,6 +561,7 @@ int get_requests(char *regist_pipe_path){ //estava void
 
 
 static void dispatch_threads(DIR *dir, char *regist_path) {
+  printf("[DpThreads] Entered dispatch_hreads\n");
   pthread_t *threads = malloc(max_threads * sizeof(pthread_t));
 
   if (threads == NULL) {
@@ -718,21 +571,22 @@ static void dispatch_threads(DIR *dir, char *regist_path) {
 
   struct SharedData thread_data = {dir, jobs_directory, PTHREAD_MUTEX_INITIALIZER};
 
-  
-
+  printf("[DpThreads] Creating Jobs Threads\n");
   for (size_t i = 0; i < max_threads; i++) {
     if (pthread_create(&threads[i], NULL, get_file, (void *)&thread_data) != 0) {
       fprintf(stderr, "Failed to create thread %zu\n", i);
       pthread_mutex_destroy(&thread_data.directory_mutex);
       free(threads);
-      continue; // Se a thread não for criada, pulamos para o próximo cliente
+      return; // Se a thread não for criada, pulamos para o próximo cliente
     }
   }
 
-  printf("created\n");
+  printf("[DpThreads] Jobs threads created\n");
   // ler do FIFO de registo
+  printf("[DpThreads] Entering get_requests\n");
   get_requests(regist_path);
-  printf("after\n");
+  printf("[DpThreads] Back to dispactch_threads from get_requests\n");
+
 
 
   for (unsigned int i = 0; i < max_threads; i++) {
@@ -759,6 +613,7 @@ void sigtstp_handler() {
     exit(0);
 }
 int main(int argc, char **argv) {
+  printf("[Main] Entered Main\n");
   signal(SIGTSTP, sigtstp_handler);
   if (argc < 4) {
     write_str(STDERR_FILENO, "Usage: ");
@@ -768,9 +623,6 @@ int main(int argc, char **argv) {
     write_str(STDERR_FILENO, " <max_backups> \n");
     return 1;
   }
-
-  printf("argv[4] = <%s>\n", argv[4]);
-  if(argv[4] == NULL){printf("hell nah\n");}
 
   jobs_directory = argv[1];
   regist_pipe_path_sig = argv[4];
@@ -813,8 +665,10 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-
+  printf("[Main] Entering Dispach Threads\n");
   dispatch_threads(dir, argv[4]);
+  printf("[Main] Back to Main from Dispatch Threads\n");
+
 
   if (closedir(dir) == -1) {
     fprintf(stderr, "Failed to close directory\n");

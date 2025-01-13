@@ -244,23 +244,30 @@ void kvs_wait(unsigned int delay_ms) {
 
 
 int kvs_disconnect_client(Client *client){
-  if(client == NULL){return 1;}
+  printf("[KvsDisconnectClient] Entered kvs_disconnected_client\n");
+  if(client == NULL){
+    printf("[KvsDisconnectClient] Given client is null. Leaving\n");
+    return 1;
+  }
   
   Node_str *keys = (client->keys);
-
+  printf("[KvsDisconnectClient] Unsubscribing client from kvs table\n");
   while(keys != NULL){
     unsubscribe_pair(kvs_table, keys->str, client->id);
     keys = keys->next;
   }
 
+  printf("[KvsDisconnectClient] Sending confirmation of disconenction to client\n");
+  //m print success message
+  
+  printf("[KvsDisconnectClient], Writing 20 to <%d>\n", client->resp_fd);
+  write(client->resp_fd, "20",2);
+
+  printf("[KvsDisconnectClient] Removing Client\n");
   //removes the client from the list fo clients
   remove_client(&clients, client->id);
 
-  //m destroy the client
-  destroy_client(client);
-
-  //m print success message
-  write(client->resp_fd, "20",2);
+  printf("[KvsDisconnectClient] Leaving kvs_disconnect_client\n");
   return 0;
 }
 
@@ -354,5 +361,7 @@ int kvs_unsubscribe_key(Client *client){
 
 
 void add_Client(Client *client){
+  printf("[AddClient] Entering append_client\n");
   append_client(&clients, client);
+  printf("[AddClient] Leaving add_Client\n");
 }
