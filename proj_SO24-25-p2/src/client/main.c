@@ -133,15 +133,7 @@ int main(int argc, char *argv[]) {
 
       printf("[Main] Key to subscribe: <%s>\n", keys[0]);
       value = kvs_subscribe(keys[0]);
-      if (value == 2){
-        kvs_disconnect();
-        printf("[Main] Joining notification thread\n");
-        if (pthread_join(notif_thread, NULL) != 0) {
-          fprintf(stderr, "Failed to join notification thread\n");
-        }
-        return 0;
-      }
-      else if(value == 1){
+      if(value == 1){
         fprintf(stderr, "Command subscribe failed\n");
       }
 
@@ -158,15 +150,7 @@ int main(int argc, char *argv[]) {
       }
 
       value = kvs_unsubscribe(keys[0]);
-      if (value == 2){
-        printf("[Main] Joining notification thread\n");
-        if (pthread_join(notif_thread, NULL) != 0) {
-          fprintf(stderr, "Failed to join notification thread\n");
-        }
-        kvs_disconnect();
-        return 0;
-      }
-      else if(value == 1){
+      if(value == 1){
         fprintf(stderr, "Command subscribe failed\n");
       }
 

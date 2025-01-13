@@ -251,16 +251,10 @@ int kvs_subscribe(const char *key) {
   //EPIPE
   //m lets try 
   if (write_all(req_fd, "3", 1) == -1 || write_all(req_fd ,key, 40) == -1){
-    if (errno == EPIPE){
-      return 2;
-    }
     fprintf(stderr, "Error writing subscribtion request to server\n");
   }
   char buff[3];
-  if (read_all(resp_fd, buff, 2, NULL) == 0){
-    return 2;
-  }
-
+  read_all(resp_fd, buff, 2, NULL);
   buff[2] = '\0';
   printf("buff = <%s>\n", buff);
   if (buff[0] != '3'){
@@ -283,6 +277,7 @@ int kvs_unsubscribe(const char *key) {
   //m lets try
   if (write_all(req_fd, "4", 1) == -1 || write_all(req_fd ,key, 40) == -1){
     if (errno == EPIPE){
+      printf("EPIDE\n");
       return 2;
     }
     fprintf(stderr, "Error writing unsubscribtion request to server\n");
@@ -290,6 +285,7 @@ int kvs_unsubscribe(const char *key) {
 
   char buff[2];
   if (read_all(resp_fd, buff, 2, NULL) == 0){
+    printf("read == 0\n");
     return 2;
   }
 
